@@ -38,6 +38,7 @@ Param types: `slider` | `select` | `check` | `text`. Sliders support `log` mappi
 5. **`RunCtx` tempo injection:** `ToolSpec.run` takes an optional 4th arg `ctx?: RunCtx {tempo}`. `extension.ts` passes `{ tempo }` (from `song.tempo`) to every `run`; only Envelope Trigger's beat-sync reads it. Other tools ignore it.
 6. **`importIntoProject()` only copies a file** — it does NOT place a clip. Audibility comes from `placeResult()`.
 7. **Modal-only UI:** `showModalDialog` is the ONLY UI surface — no non-modal panels, no transport/play API. Spacebar can't play while a dialog is open (unfixable). The Rack "stays open" by looping in `extension.ts`, re-targeting the new clip each pass.
+9. **No hotkey/MIDI binding exists in the SDK** — commands are only invoked by Live via a context-menu action (or internally via `executeCommand`); no keybinding/MIDI/mappable-control/menu-bar API, and Live's Key/MIDI Map only targets on-screen controls. So shortcuts are done OS-side: `CDP: Repeat Last` / `Repeat Last…` re-apply the last action (persisted to `storageDirectory/cdp-last.json` via `recordLast`/`loadLast`), and `automation/cdp-repeat-last.sh` (cliclick + osascript) right-clicks the clip and picks that fixed item from a keyboard shortcut or Stream Deck key.
 8. Non-WAV clip files (`.aif` factory samples) must go through `ensureWavInput` before CDP. Wrapped tools need `tempDir` as BOTH tempDir and outputDir or output lands next to the source.
 
 ## Testing

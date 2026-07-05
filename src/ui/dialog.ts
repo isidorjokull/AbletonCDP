@@ -247,7 +247,7 @@ export function toolDialogSize(spec: ToolSpec): [number, number] {
   return [380, Math.min(680, h)];
 }
 
-export function renderToolDialog(spec: ToolSpec): string {
+export function renderToolDialog(spec: ToolSpec, init: Record<string, unknown> | null = null): string {
   const clientSpec = spec.params;
   return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>CDP: ${spec.title}</title>
 <style>${CSS}</style></head><body>
@@ -259,8 +259,9 @@ export function renderToolDialog(spec: ToolSpec): string {
 <button id="cancel">Cancel</button><button class="pri" id="ok">Process</button></div>
 <script>${PARAM_JS}
 var SPEC=${embed(clientSpec)};
+var INIT=${embed(init)};
 var box=document.getElementById('params');
-buildParams(box,SPEC,null);
+buildParams(box,SPEC,INIT);
 function ok(){send({method:'close_and_send',params:[JSON.stringify(collectFrom(box))]})}
 function cancel(){send({method:'close_and_send',params:[JSON.stringify(null)]})}
 document.getElementById('ok').addEventListener('click',ok);

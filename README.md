@@ -12,7 +12,8 @@ Built on the **Ableton Extensions SDK** (beta). The extension shells out to your
 - **Non-destructive by default.** The processed audio replaces the clip in place; the original is moved to a `CDP Originals` take lane. A fresh lane is created whenever the previous backup slot is occupied, so backups never overwrite each other. The clip's colour is preserved.
 - **Region-aware.** Only the portion of the file the clip actually plays is processed, not the whole underlying sample.
 - **Stereo-safe.** Stereo-native CDP tools run directly; the rest are split to mono, processed per channel, and re-interleaved.
-- **Modular-synth-flavoured UI** with per-effect documentation built into each dialog.
+- **Modular-synth-flavoured UI** with per-effect documentation built into each dialog, a 🎲 **Randomize** button, and a searchable Rack with Recent + Tweak-last.
+- **One-click repeat.** `CDP: Repeat Last` re-applies your last effect + parameters with no dialog (persists across restarts) — bind it to a keyboard shortcut or Stream Deck key via [`automation/`](automation/README.md).
 
 ### The effects
 

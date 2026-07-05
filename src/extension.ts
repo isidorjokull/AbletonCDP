@@ -8,6 +8,8 @@ import {
   type Handle,
 } from "@ableton-extensions/sdk";
 import { tmpdir } from "os";
+import { readFileSync, writeFileSync, existsSync } from "fs";
+import { join } from "path";
 import { ensureWavInput, extractRegion } from "./runner.js";
 import { TOOLS, toolById, type ToolSpec, type ToolParams } from "./tools/registry.js";
 import {
@@ -174,6 +176,7 @@ function registerTool(context: Ctx, tempDir: string, spec: ToolSpec): void {
         if (!result) return;
         const params = JSON.parse(result) as ToolParams | null;
         if (!params) return;
+        recordLast(spec.id, params);
         await processClip(context, tempDir, clip, spec, params);
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);
@@ -192,11 +195,41 @@ function registerTool(context: Ctx, tempDir: string, spec: ToolSpec): void {
  * Esc out to audition with the spacebar (dialogs are modal — the SDK has no
  * non-modal UI) and reopen right where they left off.
  */
+/**
+ * The last CDP action (tool + params) and recent tools, shared by the Rack, the
+ * per-tool dialogs and Repeat Last. Persisted to the extension's storage dir so
+ * "repeat" survives Live restarts.
+ */
 const rackMemory: { toolId: string; params: Record<string, unknown> | null; recent: string[] } = {
   toolId: TOOLS[0]!.id,
   params: null,
   recent: [],
 };
+
+let persistPath: string | null = null;
+
+function saveLast(): void {
+  if (!persistPath) return;
+  try { writeFileSync(persistPath, JSON.stringify(rackMemory)); } catch { /* non-fatal */ }
+}
+
+/** Records a completed action as "last" and bumps it to the front of Recent. */
+function recordLast(toolId: string, params: ToolParams): void {
+  rackMemory.toolId = toolId;
+  rackMemory.params = params;
+  rackMemory.recent = [toolId, ...rackMemory.recent.filter((id) => id !== toolId)].slice(0, 8);
+  saveLast();
+}
+
+function loadLast(): void {
+  if (!persistPath || !existsSync(persistPath)) return;
+  try {
+    const j = JSON.parse(readFileSync(persistPath, "utf8")) as typeof rackMemory;
+    if (j.toolId && toolById(j.toolId)) rackMemory.toolId = j.toolId;
+    if (j.params) rackMemory.params = j.params;
+    if (Array.isArray(j.recent)) rackMemory.recent = j.recent.filter((id) => toolById(id));
+  } catch { /* ignore corrupt state */ }
+}
 
 function registerRack(context: Ctx, tempDir: string): void {
   const commandId = "cdp.rack";
@@ -224,9 +257,7 @@ function registerRack(context: Ctx, tempDir: string): void {
 
         const spec = toolById(msg.tool);
         if (!spec) return;
-        rackMemory.toolId = msg.tool;
-        rackMemory.params = msg.params;
-        rackMemory.recent = [msg.tool, ...rackMemory.recent.filter((id) => id !== msg.tool)].slice(0, 8);
+        recordLast(msg.tool, msg.params);
 
         try {
           const next = await processClip(context, tempDir, clip, spec, msg.params);
@@ -242,12 +273,74 @@ function registerRack(context: Ctx, tempDir: string): void {
   });
 }
 
+const NOTHING_YET = "Run any CDP effect once (from a tool menu or the Rack), then Repeat Last will re-apply it here with a single click — ideal for a keyboard shortcut or Stream Deck key.";
+
+/**
+ * Two menu actions that make the last effect trigger-able with one click, so an
+ * OS-level hotkey / Stream Deck macro only needs to right-click → pick a fixed
+ * item (Live/the SDK expose no hotkey or MIDI binding of their own):
+ *   "CDP: Repeat Last"   — re-applies the last tool + params instantly, no dialog.
+ *   "CDP: Repeat Last…"  — opens the last tool's dialog (pre-filled) to tweak first.
+ */
+function registerRepeatLast(context: Ctx, tempDir: string): void {
+  context.ui.registerContextMenuAction("AudioClip", "CDP: Repeat Last", "cdp.repeatLast");
+  context.commands.registerCommand("cdp.repeatLast", (arg: unknown) => {
+    void (async (handle: Handle) => {
+      try {
+        const clip = context.getObjectFromHandle(handle, AudioClip);
+        const spec = toolById(rackMemory.toolId);
+        if (!spec || !rackMemory.params) {
+          await context.ui.showModalDialog(errorDialogUrl("Nothing to repeat yet", NOTHING_YET), 400, 200);
+          return;
+        }
+        await processClip(context, tempDir, clip, spec, rackMemory.params as ToolParams);
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error("[cdp-for-live] Repeat Last error:", msg);
+        await context.ui.showModalDialog(errorDialogUrl("Repeat Last failed", msg), 400, 190);
+      }
+    })(arg as Handle);
+  });
+
+  context.ui.registerContextMenuAction("AudioClip", "CDP: Repeat Last…", "cdp.repeatLastDialog");
+  context.commands.registerCommand("cdp.repeatLastDialog", (arg: unknown) => {
+    void (async (handle: Handle) => {
+      try {
+        const clip = context.getObjectFromHandle(handle, AudioClip);
+        const spec = toolById(rackMemory.toolId);
+        if (!spec) {
+          await context.ui.showModalDialog(errorDialogUrl("Nothing to repeat yet", NOTHING_YET), 400, 200);
+          return;
+        }
+        const [w, h] = toolDialogSize(spec);
+        const result = await context.ui.showModalDialog(
+          dataUrl(renderToolDialog(spec, rackMemory.params)), w, h
+        );
+        if (!result) return;
+        const params = JSON.parse(result) as ToolParams | null;
+        if (!params) return;
+        recordLast(spec.id, params);
+        await processClip(context, tempDir, clip, spec, params);
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error("[cdp-for-live] Repeat Last… error:", msg);
+        await context.ui.showModalDialog(errorDialogUrl("Repeat Last failed", msg), 400, 190);
+      }
+    })(arg as Handle);
+  });
+}
+
 export function activate(activation: ActivationContext) {
   const context = initialize(activation, "1.0.0");
   const tempDir = context.environment.tempDirectory ?? tmpdir();
 
+  const storeDir = context.environment.storageDirectory;
+  persistPath = storeDir ? join(storeDir, "cdp-last.json") : null;
+  loadLast();
+
   registerRack(context, tempDir);
+  registerRepeatLast(context, tempDir);
   for (const spec of TOOLS) registerTool(context, tempDir, spec);
 
-  console.log(`[cdp-for-live] activated: ${TOOLS.length} tools + Rack registered`);
+  console.log(`[cdp-for-live] activated: ${TOOLS.length} tools + Rack + Repeat Last registered`);
 }
