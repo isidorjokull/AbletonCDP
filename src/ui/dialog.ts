@@ -97,6 +97,19 @@ button.pri:hover{background:var(--acc-hot);border-color:var(--acc-hot)}
   display:flex;align-items:center;gap:5px;font-size:10.5px}
 .back:hover{color:var(--acc-hot)}
 .back .arw{font-size:13px;line-height:1}
+
+/* dice / secondary button */
+button.dice{background:none;border:1px solid var(--hair);color:var(--ink-dim);padding:0 10px;letter-spacing:.04em}
+button.dice:hover{border-color:var(--acc);color:var(--acc-hot)}
+
+/* Rack grid tools: search + tweak-last */
+.gridtools{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.gridtools input{flex:1}
+.tweaklast{background:none;border:1px solid var(--hair);color:var(--ink-dim);height:26px;border-radius:4px;
+  padding:0 10px;cursor:pointer;white-space:nowrap;max-width:48%;overflow:hidden;text-overflow:ellipsis}
+.tweaklast:hover{border-color:var(--acc);color:var(--acc-hot)}
+.grid-sec[hidden]{display:none}
+.grid-empty{color:var(--ink-dim);font-size:10.5px;padding:14px 2px}
 `;
 
 /* ------------------------------------------------------------------ */
@@ -175,6 +188,38 @@ function buildParams(container,spec,init){
   return eng;
 }
 function collectFrom(container){return container.__eng.collect()}
+
+// --- Randomize: roll sensible values across a spec's params, then re-render ---
+function specDef(spec,key){for(var i=0;i<spec.length;i++)if(spec[i].key===key)return spec[i].def;return undefined}
+function effFor(spec,p,state){
+  if(!p.modeCfg)return p;
+  var mk=state[p.modeKey];if(mk===undefined)mk=specDef(spec,p.modeKey);
+  return p.modeCfg[String(mk)]||p;
+}
+function rollSlider(p,cfg){
+  var v;
+  if(p.log){v=p.min*Math.pow(p.max/p.min,Math.random());}
+  else{v=cfg.min+Math.random()*(cfg.max-cfg.min);}
+  var step=cfg.step||p.step||1;
+  v=Math.round((v-cfg.min)/step)*step+cfg.min;
+  if(v<cfg.min)v=cfg.min;if(v>cfg.max)v=cfg.max;
+  return v;
+}
+function randomize(container,spec){
+  var st=container.__eng.collect();
+  // pass 1: selects + checks (these can change which sliders are active)
+  spec.forEach(function(p){
+    if(p.type==='select')st[p.key]=p.options[Math.floor(Math.random()*p.options.length)].value;
+    else if(p.type==='check')st[p.key]=Math.random()<0.5;
+  });
+  // pass 2: sliders, within their now-effective range (skip hidden ones)
+  spec.forEach(function(p){
+    if(p.type!=='slider')return;
+    var eff=effFor(spec,p,st);if(eff.hide)return;
+    st[p.key]=rollSlider(p,eff);
+  });
+  buildParams(container,spec,st);
+}
 `;
 
 function embed(v: unknown): string {
@@ -210,7 +255,7 @@ export function renderToolDialog(spec: ToolSpec): string {
 <div class="blurb">${spec.blurb}</div>
 <div class="params" id="params"></div>
 <div class="docs"><span class="cat">${spec.group}</span>${spec.docs}</div>
-<div class="ftr"><span class="spacer"></span>
+<div class="ftr"><button class="dice" id="rnd" title="Randomize parameters">🎲 Random</button><span class="spacer"></span>
 <button id="cancel">Cancel</button><button class="pri" id="ok">Process</button></div>
 <script>${PARAM_JS}
 var SPEC=${embed(clientSpec)};
@@ -220,7 +265,11 @@ function ok(){send({method:'close_and_send',params:[JSON.stringify(collectFrom(b
 function cancel(){send({method:'close_and_send',params:[JSON.stringify(null)]})}
 document.getElementById('ok').addEventListener('click',ok);
 document.getElementById('cancel').addEventListener('click',cancel);
-document.addEventListener('keydown',function(e){if(e.key==='Enter')ok();if(e.key==='Escape')cancel()});
+document.getElementById('rnd').addEventListener('click',function(){randomize(box,SPEC)});
+document.addEventListener('keydown',function(e){
+  if(e.key==='Enter')ok();if(e.key==='Escape')cancel();
+  if(e.key==='r'&&(e.metaKey||e.ctrlKey)){e.preventDefault();randomize(box,SPEC)}
+});
 </script></body></html>`;
 }
 
@@ -236,6 +285,8 @@ export interface AllDialogState {
   toolId: string;
   params: Record<string, unknown> | null;
   clipName: string;
+  /** Most-recently used tool ids, newest first (for the Recent row + Tweak-last). */
+  recent: string[];
 }
 
 export function renderAllDialog(tools: ToolSpec[], state: AllDialogState): string {
@@ -254,7 +305,14 @@ export function renderAllDialog(tools: ToolSpec[], state: AllDialogState): strin
 </div>
 
 <!-- grid landing -->
-<div class="grid-wrap" id="gridView"></div>
+<div class="grid-wrap" id="gridView">
+  <div class="gridtools">
+    <input id="search" type="text" spellcheck="false" placeholder="Search effects…" aria-label="Search effects">
+    <button class="tweaklast" id="tweaklast" hidden></button>
+  </div>
+  <div id="gridBody"></div>
+  <div class="grid-empty" id="noResults" hidden>No effects match.</div>
+</div>
 
 <!-- effect detail -->
 <div class="pane" id="detailView" hidden>
@@ -265,6 +323,7 @@ export function renderAllDialog(tools: ToolSpec[], state: AllDialogState): strin
 
 <div class="ftr">
   <span class="target">target&nbsp;&nbsp;<b id="clip"></b></span>
+  <button class="dice" id="rnd" hidden title="Randomize parameters">🎲 Random</button>
   <button id="close">Close</button>
   <button class="pri" id="ok" hidden>Process</button>
 </div>
@@ -275,38 +334,67 @@ var STATE=${embed(state)};
 var curId=null;
 var paramBox=document.getElementById('params');
 document.getElementById('clip').textContent=STATE.clipName;
+var byId=function(id){return TOOLS.find(function(x){return x.id===id})};
 
-// build grid
-var gv=document.getElementById('gridView');
+// build grid into #gridBody: a "Recent" section (if any) then one section per category.
+var gbody=document.getElementById('gridBody');
+function makeCell(t){
+  var b=document.createElement('button');b.className='cell';b.textContent=t.title;
+  b.dataset.id=t.id;b.dataset.title=t.title.toLowerCase();
+  b.addEventListener('click',function(){openDetail(t.id)});
+  return b;
+}
+function makeSection(label,tools){
+  var sec=document.createElement('div');sec.className='grid-sec';
+  var h=document.createElement('div');h.className='grid-grp';h.textContent=label;sec.appendChild(h);
+  var grid=document.createElement('div');grid.className='grid';
+  tools.forEach(function(t){grid.appendChild(makeCell(t))});
+  sec.appendChild(grid);return sec;
+}
+var recentTools=(STATE.recent||[]).map(byId).filter(Boolean);
+if(recentTools.length)gbody.appendChild(makeSection('Recent',recentTools));
 GROUPS.forEach(function(g){
   var tools=TOOLS.filter(function(t){return t.group===g});
-  if(!tools.length)return;
-  var h=document.createElement('div');h.className='grid-grp';h.textContent=g;gv.appendChild(h);
-  var grid=document.createElement('div');grid.className='grid';
-  tools.forEach(function(t){
-    var b=document.createElement('button');b.className='cell';b.textContent=t.title;b.dataset.id=t.id;
-    b.addEventListener('click',function(){openDetail(t.id)});
-    grid.appendChild(b);
-  });
-  gv.appendChild(grid);
+  if(tools.length)gbody.appendChild(makeSection(g,tools));
 });
 
 var elGrid=document.getElementById('gridView'),elDetail=document.getElementById('detailView'),
-    elBack=document.getElementById('back'),elOk=document.getElementById('ok'),
+    elBack=document.getElementById('back'),elOk=document.getElementById('ok'),elRnd=document.getElementById('rnd'),
     elTitle=document.getElementById('title'),elBrand=document.getElementById('brand'),
-    elLed=document.getElementById('led');
+    elLed=document.getElementById('led'),elSearch=document.getElementById('search'),
+    elTweak=document.getElementById('tweaklast'),elNo=document.getElementById('noResults');
+
+// Tweak-last: reopen the most recently used effect directly
+if(STATE.toolId&&byId(STATE.toolId)){
+  elTweak.hidden=false;
+  elTweak.textContent='↻ '+byId(STATE.toolId).title;
+  elTweak.addEventListener('click',function(){openDetail(STATE.toolId)});
+}
+
+function applySearch(){
+  var q=elSearch.value.trim().toLowerCase();var anyAll=false;
+  document.querySelectorAll('#gridBody .grid-sec').forEach(function(sec){
+    var any=false;
+    sec.querySelectorAll('.cell').forEach(function(c){
+      var show=!q||c.dataset.title.indexOf(q)>=0;c.hidden=!show;if(show)any=true;
+    });
+    sec.hidden=!any;if(any)anyAll=true;
+  });
+  elNo.hidden=anyAll;
+}
+elSearch.addEventListener('input',applySearch);
 
 function showGrid(){
   curId=null;
   elGrid.hidden=false;elDetail.hidden=true;
-  elBack.hidden=true;elOk.hidden=true;elLed.hidden=false;
+  elBack.hidden=true;elOk.hidden=true;elRnd.hidden=true;elLed.hidden=false;
   elTitle.textContent='CDP Rack';elBrand.textContent='Rack';
 }
 function openDetail(id){
   curId=id;
-  var t=TOOLS.find(function(x){return x.id===id});
+  var t=byId(id);
   elGrid.hidden=true;elDetail.hidden=false;
-  elBack.hidden=false;elOk.hidden=false;elLed.hidden=true;
+  elBack.hidden=false;elOk.hidden=false;elRnd.hidden=false;elLed.hidden=true;
   elTitle.textContent=t.title;elBrand.textContent=t.group;
   document.getElementById('blurb').textContent=t.blurb;
   document.getElementById('cat').textContent=t.group;
@@ -316,13 +404,19 @@ function openDetail(id){
 }
 
 elBack.addEventListener('click',showGrid);
+elRnd.addEventListener('click',function(){if(curId)randomize(paramBox,byId(curId).params)});
 function ok(){if(!curId)return;send({method:'close_and_send',params:[JSON.stringify({tool:curId,params:collectFrom(paramBox)})]})}
 function closeIt(){send({method:'close_and_send',params:[JSON.stringify(null)]})}
 document.getElementById('ok').addEventListener('click',ok);
 document.getElementById('close').addEventListener('click',closeIt);
 document.addEventListener('keydown',function(e){
   if(e.key==='Enter'&&curId)ok();
-  if(e.key==='Escape'){if(curId)showGrid();else closeIt();}
+  if(e.key==='r'&&(e.metaKey||e.ctrlKey)&&curId){e.preventDefault();randomize(paramBox,byId(curId).params);return}
+  if(e.key==='Escape'){
+    if(curId){showGrid();return}
+    if(document.activeElement===elSearch&&elSearch.value){elSearch.value='';applySearch();return}
+    closeIt();
+  }
 });
 showGrid();
 </script></body></html>`;

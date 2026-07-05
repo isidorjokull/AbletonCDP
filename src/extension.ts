@@ -192,9 +192,10 @@ function registerTool(context: Ctx, tempDir: string, spec: ToolSpec): void {
  * Esc out to audition with the spacebar (dialogs are modal — the SDK has no
  * non-modal UI) and reopen right where they left off.
  */
-const rackMemory: { toolId: string; params: Record<string, unknown> | null } = {
+const rackMemory: { toolId: string; params: Record<string, unknown> | null; recent: string[] } = {
   toolId: TOOLS[0]!.id,
   params: null,
+  recent: [],
 };
 
 function registerRack(context: Ctx, tempDir: string): void {
@@ -211,6 +212,7 @@ function registerRack(context: Ctx, tempDir: string): void {
             toolId: rackMemory.toolId,
             params: rackMemory.params,
             clipName: clip.name,
+            recent: rackMemory.recent,
           });
           result = await context.ui.showModalDialog(dataUrl(html), ALL_DIALOG_W, ALL_DIALOG_H);
         } catch {
@@ -224,6 +226,7 @@ function registerRack(context: Ctx, tempDir: string): void {
         if (!spec) return;
         rackMemory.toolId = msg.tool;
         rackMemory.params = msg.params;
+        rackMemory.recent = [msg.tool, ...rackMemory.recent.filter((id) => id !== msg.tool)].slice(0, 8);
 
         try {
           const next = await processClip(context, tempDir, clip, spec, msg.params);
