@@ -4,7 +4,7 @@ Guidance for Claude Code working in this repo. Facts here are **verified by runn
 
 ## What this is
 
-`cdp-for-live` — an Ableton **Extensions SDK** plugin (TypeScript) that exposes **CDP** (Composers Desktop Project, Release 8) audio tools as right-click context-menu actions on AudioClips in **Ableton Live 12 Beta** (developer mode). It shells out to local CDP binaries via `child_process.spawn`. 31 tools (across groups Time & Pitch, Spectral, Waveset & Distort, Cut & Shuffle, Envelope, Ambient & Space) + a combined "All Tools" Rack.
+`cdp-for-live` — an Ableton **Extensions SDK** plugin (TypeScript) that exposes **CDP** (Composers Desktop Project, Release 8) audio tools as right-click context-menu actions on AudioClips in **Ableton Live 12 Beta** (developer mode). It shells out to local CDP binaries via `child_process.spawn`. 35 tools (across groups Time & Pitch, Spectral, Waveset & Distort, Cut & Shuffle, Envelope, Ambient & Space) + a combined "All Tools" Rack.
 
 - **CDP binaries:** `/Users/isidor/cdpr8/_cdp/_cdprogs/` — **x86_64 (Intel) via Rosetta 2**, not arm64. Path resolved in `src/config.ts` (`CDP_BIN_DIR` env overrides).
 - **Extension Host:** path in `.env` as `EXTENSION_HOST_PATH`. **Do not `cat .env`** — the auto-mode classifier blocks it.
@@ -33,7 +33,7 @@ Param types: `slider` | `select` | `check` | `text`. Sliders support `log` mappi
 
 1. **LOM unit quirk:** UNWARPED clips report `startMarker`/`endMarker` in **SECONDS**; WARPED clips in **beats**. The SDK docstring saying "beats" is wrong for unwarped. `processClip` uses `toSec(m) = clip.warping ? m*60/tempo : m`.
 2. **`pvoc anal` FAILS on stereo** ("doesn't work with this type of infile"). Use `pvocex2` for pitch/stretch/freeze.
-3. **Stereo handling:** `envel*`, `sfecho`, `bounce`, `extend scramble`, `constrict`, and `reverb` are stereo-native. `reverb` is special — it always outputs stereo (mono in → 2ch out, self-spatialising), so it must NOT be wrapped. Everything else (all `distort`/waveset ops, all `blur`/pvoc spectral ops) goes through `runWithStereoSupport` (ffmpeg `channelsplit` → process each mono channel → `interlx` merge). ffmpeg 8's `-map_channel` is **removed** — must use the `channelsplit` filter.
+3. **Stereo handling:** `envel*`, `sfecho`, `bounce`, `extend scramble`, `constrict` are stereo-native. `reverb` and `modify brassage` are **stereo-producing** — they always output stereo (mono in → 2ch out, self-spatialising; stereo in is mixed to mono first), so they must NOT be wrapped. `hover` is mono-only (stereo in → empty output) so it IS wrapped. Everything else (all `distort`/waveset ops, all `blur`/pvoc spectral ops) goes through `runWithStereoSupport` (ffmpeg `channelsplit` → process each mono channel → `interlx` merge). ffmpeg 8's `-map_channel` is **removed** — must use the `channelsplit` filter.
 4. **`envel impose 3`** imposes a *generated text breakpoint* gain curve (`time value` pairs, 0–1, ascending, ≥2) and **multiplies** the signal (a gate). Stereo-native. This powers the **Envelope Trigger** tool, which synthesises the curve from beat/time/random/bounce generators — no donor file.
 5. **`RunCtx` tempo injection:** `ToolSpec.run` takes an optional 4th arg `ctx?: RunCtx {tempo}`. `extension.ts` passes `{ tempo }` (from `song.tempo`) to every `run`; only Envelope Trigger's beat-sync reads it. Other tools ignore it.
 6. **`importIntoProject()` only copies a file** — it does NOT place a clip. Audibility comes from `placeResult()`.

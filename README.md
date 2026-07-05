@@ -8,7 +8,7 @@ Built on the **Ableton Extensions SDK** (beta). The extension shells out to your
 
 ## Features
 
-- **31 CDP effects** grouped into a clip context menu, plus an **All Tools** rack that opens a grid of every effect and lets you **chain** processing without leaving the panel.
+- **35 CDP effects** grouped into a clip context menu, plus an **All Tools** rack that opens a grid of every effect and lets you **chain** processing without leaving the panel.
 - **Non-destructive by default.** The processed audio replaces the clip in place; the original is moved to a `CDP Originals` take lane. A fresh lane is created whenever the previous backup slot is occupied, so backups never overwrite each other. The clip's colour is preserved.
 - **Region-aware.** Only the portion of the file the clip actually plays is processed, not the whole underlying sample.
 - **Stereo-safe.** Stereo-native CDP tools run directly; the rest are split to mono, processed per channel, and re-interleaved.
@@ -18,12 +18,12 @@ Built on the **Ableton Extensions SDK** (beta). The extension shells out to your
 
 | Group | Tools |
 |-------|-------|
-| **Time & Pitch** | Pitch Shift · Time Stretch · Granular · Echo |
-| **Spectral** | Spectral Freeze · Spectral Blur · Spectral Chorus · Spectral Stretch · Spectral Sustain · Spectral Fold |
+| **Time & Pitch** | Pitch Shift · Time Stretch · Granular · **Brassage** · Echo |
+| **Spectral** | Spectral Freeze · Spectral Blur · Spectral Chorus · Spectral Stretch · Spectral Sustain · Spectral Fold · **Frequency Shifter** |
 | **Waveset & Distort** | Overload · Fractal · Waveset Repeat · Waveset Reverse · Waveset Divide · Waveset Interpolate · Waveset Telescope · Waveset Omit |
 | **Cut & Shuffle** | Bounce · Scramble · Constrict · Zigzag · Iteration Freeze |
 | **Envelope** | **Envelope Trigger** · Envelope Warp · Tremolo · Swell · Peak Chop |
-| **Ambient & Space** | Reverb · Spectral Drunk · Spectral Spread |
+| **Ambient & Space** | Reverb · Spectral Drunk · Spectral Spread · **Glisten** · **Hover** |
 
 **Envelope Trigger** is a generative gate: it synthesises its own amplitude envelope and re-triggers the clip in a rhythm you design — **Beat sync** (locked to Live's tempo), **Time** (fixed seconds), **Random** (scattered hits), or **Bounce** (bouncing-ball spacing that accelerates or decelerates). Attack, Release, and Floor shape each hit. No donor file required.
 

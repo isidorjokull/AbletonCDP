@@ -29,6 +29,10 @@ import { wavesetOmit } from "./waveset-omit.js";
 import { reverb } from "./reverb.js";
 import { spectralDrunk } from "./spectral-drunk.js";
 import { spectralSpread } from "./spectral-spread.js";
+import { frequencyShift } from "./frequency-shift.js";
+import { glisten } from "./glisten.js";
+import { hover } from "./hover.js";
+import { brassage } from "./brassage.js";
 
 /** One dialog control. Rendered identically in per-tool and All dialogs. */
 export interface ParamSpec {
@@ -92,6 +96,22 @@ export const TOOLS: ToolSpec[] = [
     docs: "Time-stretches by resequencing grains rather than analysing the spectrum, so it sounds grainier and more textured than Time Stretch. Above 1× it slows and thickens; below 1× it thins and speeds up. Character over fidelity.",
     params: [{ key: "timeRatio", label: "Timewarp", type: "slider", min: 0.1, max: 10, step: 0.1, def: 2, unit: "×" }],
     run: (i, p, td) => granular(i, { timeRatio: n(p.timeRatio) }, td),
+  },
+  {
+    id: "cdp.brassage", title: "Brassage", group: "Time & Pitch",
+    blurb: "CDP's flagship granulator — rebuilds the sound grain by grain.",
+    docs: "Reconstitutes the clip from a stream of tiny grains, giving independent control over speed, density, size and pitch — the deep granular engine at the heart of CDP. Speed below 1 stretches time (0.5 = half speed); Density above 1 overlaps grains into a thick wash, below 1 opens gaps; Grain size shifts it from fine dust to chunky stutter; Jitter scatters grain timing. Outputs a spatialised stereo texture.",
+    params: [
+      { key: "velocity", label: "Speed", type: "slider", min: 0.1, max: 4, step: 0.05, def: 1, unit: "×" },
+      { key: "density", label: "Density", type: "slider", min: 0.2, max: 8, step: 0.1, def: 2 },
+      { key: "grainsize", label: "Grain size", type: "slider", min: 11, max: 200, step: 1, def: 50, unit: " ms" },
+      { key: "pitch", label: "Pitch", type: "slider", min: -12, max: 12, step: 0.5, def: 0, unit: " st" },
+      { key: "jitter", label: "Jitter", type: "slider", min: 0, max: 1, step: 0.05, def: 0.5 },
+    ],
+    run: (i, p, td) => brassage(i, {
+      velocity: n(p.velocity), density: n(p.density), grainsize: n(p.grainsize),
+      pitch: n(p.pitch), jitter: n(p.jitter),
+    }, td),
   },
   {
     id: "cdp.imposeEnvelope", title: "Envelope Trigger", group: "Envelope",
@@ -358,6 +378,15 @@ export const TOOLS: ToolSpec[] = [
     run: (i, p, td) => spectralFold(i, { startCh: n(p.startCh), length: n(p.length), count: n(p.count) }, td, td),
   },
   {
+    id: "cdp.freqShift", title: "Frequency Shifter", group: "Spectral",
+    blurb: "Shifts every partial by fixed Hz — inharmonic and metallic.",
+    docs: "Shifts all spectral partials by the same number of Hz rather than a ratio, so their harmonic relationships break and the sound turns clangorous, bell-like or robotic — the alien cousin of pitch shift. Small shifts add a shimmering detune; large shifts fully de-tune the material into metal and glass. Positive shifts move partials up, negative down.",
+    params: [
+      { key: "shiftHz", label: "Shift", type: "slider", min: -500, max: 500, step: 5, def: 100, unit: " Hz" },
+    ],
+    run: (i, p, td) => frequencyShift(i, { shiftHz: n(p.shiftHz) }, td, td),
+  },
+  {
     id: "cdp.envWarp", title: "Envelope Warp", group: "Envelope",
     blurb: "Reshapes the clip's own loudness contour.",
     docs: "Rewrites the clip's amplitude envelope without touching its pitch or timing. Exaggerate deepens the dynamics, Flatten irons them out, Reverse plays the loudness contour backwards over the same audio, Corrugate chops it into rhythmic ridges. Window sets how finely the envelope is measured.",
@@ -447,6 +476,40 @@ export const TOOLS: ToolSpec[] = [
       { key: "detail", label: "Detail", type: "slider", min: 2, max: 32, step: 1, def: 8, unit: " ch" },
     ],
     run: (i, p, td) => spectralSpread(i, { spread: n(p.spread), detail: n(p.detail) }, td, td),
+  },
+  {
+    id: "cdp.glisten", title: "Glisten", group: "Ambient & Space",
+    blurb: "Random spectral bins played in sequence — shimmering arpeggios.",
+    docs: "Randomly splits the spectrum into a number of bins and plays them one after another, re-shuffling every pass, so a sustained sound self-arpeggiates into glistening spectral sparkle. Bins sets how many slices (more = finer shimmer); Set length how long each bin sounds (shorter = faster twinkle). Pitch transposes the sparkle and Scatter randomises the timing. Magic on pads and drones.",
+    params: [
+      {
+        key: "bins", label: "Bins", type: "select", def: "8",
+        options: [
+          { value: "2", label: "2" }, { value: "4", label: "4" }, { value: "8", label: "8" },
+          { value: "16", label: "16" }, { value: "32", label: "32" }, { value: "64", label: "64" },
+        ],
+      },
+      { key: "setDur", label: "Set length", type: "slider", min: 1, max: 40, step: 1, def: 6, unit: " win" },
+      { key: "pitch", label: "Pitch", type: "slider", min: -12, max: 12, step: 1, def: 0, unit: " st" },
+      { key: "scatter", label: "Scatter", type: "slider", min: 0, max: 1, step: 0.05, def: 0 },
+    ],
+    run: (i, p, td) => glisten(i, {
+      bins: n(p.bins), setDur: n(p.setDur), pitch: n(p.pitch), scatter: n(p.scatter),
+    }, td, td),
+  },
+  {
+    id: "cdp.hover", title: "Hover", group: "Ambient & Space",
+    blurb: "Zig-zag scrub-read at a chosen rate — a scanning granular freeze.",
+    docs: "Hovers over a point in the clip, zig-zag reading back and forth at a chosen rate to freeze and scan the sound — a granular scrubber you can park anywhere. Rate sets the read frequency (its pitch and grain); Position picks where in the clip to hover; Wander drifts that position over time and Rate drift randomises the read speed. Set Wander high to slowly roam the whole clip.",
+    params: [
+      { key: "frq", label: "Rate", type: "slider", min: 0.5, max: 60, step: 0.5, def: 8, unit: " Hz", log: true },
+      { key: "locFrac", label: "Position", type: "slider", min: 0, max: 1, step: 0.02, def: 0.25 },
+      { key: "locRand", label: "Wander", type: "slider", min: 0, max: 1, step: 0.05, def: 0.2 },
+      { key: "frqRand", label: "Rate drift", type: "slider", min: 0, max: 1, step: 0.05, def: 0.1 },
+    ],
+    run: (i, p, td) => hover(i, {
+      frq: n(p.frq), locFrac: n(p.locFrac), frqRand: n(p.frqRand), locRand: n(p.locRand),
+    }, td, td),
   },
 ];
 
