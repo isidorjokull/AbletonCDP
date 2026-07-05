@@ -1,0 +1,19 @@
+# Dependencies
+node_modules/
+
+# Build artifacts
+dist/
+*.ablx
+
+# Local environment (contains machine-specific ExtensionHost path)
+.env
+
+# Local tooling / editor state
+.claude/settings.local.json
+.remember/
+.DS_Store
+
+# Vendored SDK: keep the .tgz (npm file: deps) + LICENSE, drop unpacked reference docs
+extensions-sdk-1.0.0-beta.0/api/
+extensions-sdk-1.0.0-beta.0/docs/
+extensions-sdk-1.0.0-beta.0/examples/
