@@ -28,18 +28,36 @@ if (typeof jsarguments !== "undefined" && jsarguments.length > 1) {
   COMMAND = jsarguments[1];
 }
 
-function bang() {
+// live.text's output shape depends on its mode: a mouse click in momentary
+// (mode 0) sends a BANG, while toggle mode sends 1 then 0. Rather than filter
+// on one shape and break on the other, accept anything the button sends and
+// debounce, so a 1/0 pair still fires exactly once.
+var DEBOUNCE_MS = 150;
+var lastFire = 0;
+
+function triggered() {
+  var now = new Date().getTime();
+  if (now - lastFire < DEBOUNCE_MS) return;
+  lastFire = now;
   fire();
 }
 
-// live.text in Trigger mode sends 1 on press (and may send 0 on release);
-// only act on the non-zero value so one press means one dispatch.
-function msg_int(v) {
-  if (v) fire();
+function bang() {
+  triggered();
 }
 
-function msg_float(v) {
-  if (v) fire();
+function msg_int() {
+  triggered();
+}
+
+function msg_float() {
+  triggered();
+}
+
+// Any other message from the button (e.g. its label symbol) also triggers;
+// `command` and `port` below have their own handlers and take precedence.
+function anything() {
+  triggered();
 }
 
 // Optional: let the user override from the patcher, e.g. [; cdp command cdp.repeatLast]

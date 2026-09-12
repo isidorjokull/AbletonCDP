@@ -64,11 +64,11 @@ const connect = (src, outlet, dst, inlet = 0) =>
 // Each button gets its own js instance, with the command id as an object
 // argument, so one script drives all of them.
 const buttons = [
-  { id: "obj-10", sel: "obj-11", js: "obj-12", y: 180.0, py: 10.0,
+  { id: "obj-10", js: "obj-12", y: 180.0, py: 10.0,
     label: "All Tools", command: "cdp.rack",
     longname: "CDP All Tools", shortname: "CDP All",
     info: "Opens the CDP All Tools Rack on the clip selected in Live." },
-  { id: "obj-20", sel: "obj-21", js: "obj-22", y: 245.0, py: 40.0,
+  { id: "obj-20", js: "obj-22", y: 245.0, py: 40.0,
     label: "Repeat Last", command: "cdp.repeatLast",
     longname: "CDP Repeat Last", shortname: "CDP Rpt",
     info: "Re-applies the last CDP tool and settings to the selected clip, with no dialog." },
@@ -109,16 +109,14 @@ for (const b of buttons) {
     },
   });
 
-  // Only the non-zero value acts, so press-and-release is one dispatch.
-  box({ maxclass: "newobj", id: b.sel, text: "sel 1", numinlets: 2, numoutlets: 2,
-        outlettype: ["bang", ""], patching_rect: [48.0, b.y + 30, 40.0, 22.0], fontsize: 11.0 });
-
   box({ maxclass: "newobj", id: b.js, text: `js cdp-trigger.js ${b.command}`,
         numinlets: 1, numoutlets: 2, outlettype: ["", ""],
-        patching_rect: [48.0, b.y + 58, 190.0, 22.0], fontsize: 11.0 });
+        patching_rect: [48.0, b.y + 30, 190.0, 22.0], fontsize: 11.0 });
 
-  connect(b.id, 0, b.sel);   // button -> sel 1
-  connect(b.sel, 0, b.js);   // bang   -> js
+  // Straight to the script - no [sel 1]. A momentary live.text click sends a
+  // BANG, which [sel 1] silently swallowed; the script debounces instead, so it
+  // works whichever shape the button emits.
+  connect(b.id, 0, b.js);
   connect(b.js, 0, "obj-13"); // URL    -> maxurl (shared)
   connect(b.js, 1, "obj-14"); // status -> console (shared)
 }
@@ -153,9 +151,8 @@ const btns = back.boxes.filter((b) => b.box.maxclass === "live.text").map((b) =>
 const byId2 = new Map(back.boxes.map((b) => [b.box.id, b.box]));
 for (const btn of btns) {
   const v = btn.saved_attribute_attributes.valueof;
-  // Trace button -> sel -> js to report which command each one actually fires.
-  const sel = back.lines.find((l) => l.patchline.source[0] === btn.id)?.patchline.destination[0];
-  const jsId = back.lines.find((l) => l.patchline.source[0] === sel)?.patchline.destination[0];
+  // Trace button -> js to report which command each one actually fires.
+  const jsId = back.lines.find((l) => l.patchline.source[0] === btn.id)?.patchline.destination[0];
   const jsText = jsId ? byId2.get(jsId)?.text : "(unwired)";
   console.log(`  button "${btn.text}": mode=${btn.mode} param="${v.parameter_longname}" -> ${jsText}`);
 }
@@ -189,6 +186,18 @@ for (const btn of btns) {
   names.add(v.parameter_longname);
   if (v.parameter_initial_enable) problems.push(`${btn.id} would fire on load (parameter_initial_enable)`);
 }
+// A momentary live.text click sends a BANG, so any filter expecting a specific
+// value between the button and the script swallows it and the device goes
+// silent with nothing in the Max Console. Require a direct connection.
+for (const btn of btns) {
+  const dest = back.lines.find((l) => l.patchline.source[0] === btn.id)?.patchline.destination[0];
+  const destBox = dest ? byId2.get(dest) : undefined;
+  if (!destBox) problems.push(`${btn.id} ("${btn.text}") is not connected to anything`);
+  else if (!String(destBox.text ?? "").startsWith("js ")) {
+    problems.push(`${btn.id} ("${btn.text}") feeds "${destBox.text}" instead of the js object - a value filter drops the bang`);
+  }
+}
+
 // Every js object must carry a command argument, or it silently defaults.
 for (const b of back.boxes) {
   const t = b.box.text ?? "";
