@@ -36,12 +36,16 @@ Each of these was tested, not assumed. They are the load-bearing facts.
 | `showModalDialog` works from a **programmatic** invoke | Dialog opened from a bare `setTimeout` callback with no Live UI context, rendering `Opened by: timer-executeCommand`. No throw; heartbeats continued for 4.5s afterwards, so no deadlock. |
 | The **real Rack** opens programmatically on a real clip | `executeCommand("cdp.rack", clip.handle)` after walking the LOM: `found arrangement clip: track[7] idx[0] name="A_T2 Aux-St"`, `filePath=…/A_T2 Aux-St.wav`. Returned without throwing; dialog appeared. |
 
-### Still unverified (needs Live + Max in front of a human)
+### Owned by the user (2026-09-12)
 
-1. Live's Key Map binding a keystroke to an **unfocused** M4L button.
-2. `[maxurl]` reaching `http://127.0.0.1:PORT` from inside Live.
+The user handles the mapping layer themselves:
 
-Neither is exotic; both are first-step checks during implementation.
+- Live **Key Map** for the keyboard shortcut.
+- Live **MIDI Map** for a Stream Deck key, which sends MIDI to the same button.
+
+The device therefore needs one button that is both Key- and MIDI-mappable (a
+`live.text` in button mode is both). Verifying `[maxurl]` reaching loopback from
+inside Live also falls to the user, as it needs Max running.
 
 ## Non-goals
 
@@ -147,7 +151,8 @@ Device contents:
   slot/arrangement index
 - `sprintf` building the URL
 - `[maxurl]` performing the GET
-- A `live.text`/button (the Key Map target) and a status readout
+- A `live.text` in button mode — the single Key Map **and** MIDI Map target —
+  plus a status readout
 - A port number box defaulting to 17817
 
 ## Testing
@@ -180,9 +185,7 @@ unaffected — Live hosts it directly with no CLI watchdog.
 4. Wire into `activate()`. Verify with `curl`.
 5. Package, install, verify end-to-end with `curl` against the installed host.
 6. Max patcher JSON + setup instructions.
-7. Verify the two open unknowns (Key Map to unfocused button; `[maxurl]` to
-   loopback).
-8. Document in CLAUDE.md and `project-cdp-for-live.md`.
+7. Document in CLAUDE.md and `project-cdp-for-live.md`.
 
 ## Open questions
 

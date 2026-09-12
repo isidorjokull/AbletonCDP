@@ -19,6 +19,8 @@ import {
   ALL_DIALOG_W,
   ALL_DIALOG_H,
 } from "./ui/dialog.js";
+import { startCdpServer, DEFAULT_PORT } from "./server.js";
+import { createDispatcher, type SdkLike } from "./dispatch.js";
 
 type Ctx = ReturnType<typeof initialize>;
 
@@ -342,5 +344,46 @@ export function activate(activation: ActivationContext) {
   registerRepeatLast(context, tempDir);
   for (const spec of TOOLS) registerTool(context, tempDir, spec);
 
+  startCommandEndpoint(context);
+
   console.log(`[cdp-for-live] activated: ${TOOLS.length} tools + Rack + Repeat Last registered`);
+}
+
+/**
+ * Command ids reachable over the endpoint: every tool, plus the Rack and the
+ * two Repeat Last variants. Derived from TOOLS so new tools are exposed
+ * automatically; the three fixed ids mirror the literals in registerRack and
+ * registerRepeatLast.
+ */
+function registeredCommandIds(): Set<string> {
+  return new Set<string>([
+    ...TOOLS.map((t) => t.id),
+    "cdp.rack",
+    "cdp.repeatLast",
+    "cdp.repeatLastDialog",
+  ]);
+}
+
+/**
+ * Starts the loopback endpoint that lets a Max for Live device (and hence a
+ * keyboard shortcut or Stream Deck key) invoke any registered command on a clip
+ * it names. Max supplies the selection, which the SDK itself cannot report.
+ */
+function startCommandEndpoint(context: Ctx): void {
+  const sdk: SdkLike = {
+    application: context.application,
+    getObjectFromHandle: (handle) => context.getObjectFromHandle(handle as Handle, AudioClip),
+    executeCommand: (id, handle) => context.commands.executeCommand(id, handle),
+  };
+
+  const portEnv = Number(process.env["CDP_PORT"]);
+  const port = Number.isInteger(portEnv) && portEnv > 0 ? portEnv : DEFAULT_PORT;
+  const token = process.env["CDP_TOKEN"] || undefined;
+
+  void startCdpServer(createDispatcher(sdk, registeredCommandIds()), { port, token }).catch(
+    (e: unknown) => {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.log(`[cdp-for-live] command endpoint failed to start: ${msg}`);
+    },
+  );
 }
