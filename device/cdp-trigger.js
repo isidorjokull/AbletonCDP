@@ -78,7 +78,10 @@ function fire() {
     "&path=" + path.replace(/ /g, "%20");
 
   post("[CDP] GET " + url + "\n");
-  outlet(0, url);
+  // maxurl needs a method, not a bare symbol: it understands get/post/put/
+  // delete (confirmed in maxurl.maxref.xml). A bare URL gives
+  // "maxurl: doesn't understand ...".
+  outlet(0, "get", url);
 }
 
 function report(msg) {

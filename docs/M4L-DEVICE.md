@@ -135,6 +135,10 @@ under Key/MIDI Map — that needs Live and Max, which is your step 3 above.
 - **Nothing in the console at all** — the `js` object did not load. Check that
   `cdp-trigger.js` sits in the same folder as the `.amxd`, and look for a
   "can't find file" error in the Max Console.
+- **`maxurl: doesn't understand "http://..."`** — `maxurl` needs a method, not
+  a bare URL. The script sends `get <url>`; the object's other methods are
+  `post`, `put`, `delete`, `dictionary`, `verbosity`, `abort` and `abortall`
+  (from `maxurl.maxref.xml`).
 - **`{"ok":false,"error":"clip not found"}`** — the path resolved to a track or
   slot with no audio clip. Selecting a MIDI clip gives this too.
 - **`{"error":"busy"}`** — a command is still in flight. Note that while a CDP
