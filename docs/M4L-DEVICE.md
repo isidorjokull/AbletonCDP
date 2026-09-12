@@ -89,17 +89,16 @@ anywhere in a chain.
 4. Once that works, bind it: **Key Map** (or **MIDI Map** for a Stream Deck key)
    and click the device's button.
 
-### Changing what the button does
+### Adding or changing buttons
 
-Any registered command id works. Either edit `COMMAND` at the top of
-`cdp-trigger.js`, or send the `js` object a message at runtime:
+The command id is an **object argument**, so one script serves every button:
+`[js cdp-trigger.js cdp.rack]`, `[js cdp-trigger.js cdp.repeatLast]`, or any
+tool id from `src/tools/registry.ts`. To add a third button, append an entry to
+the `buttons` array in `device/build-device.mjs` and rebuild — give it a unique
+`longname`.
 
-```
-[; cdp command cdp.repeatLast]
-```
-
-`command` and `port` are both settable that way, so one device can be
-repurposed without rebuilding it.
+`command` and `port` are also settable at runtime by message, e.g.
+`[; cdp command cdp.repeatLastDialog]`.
 
 ### Rebuilding
 

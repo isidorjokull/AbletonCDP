@@ -20,6 +20,14 @@ var PORT = 17817;
 // cdp.repeatLastDialog, or a single tool's id from src/tools/registry.ts.
 var COMMAND = "cdp.rack";
 
+// An object argument overrides it, so one script serves every button:
+//   [js cdp-trigger.js cdp.rack]
+//   [js cdp-trigger.js cdp.repeatLast]
+// jsarguments[0] is the script name, so the first real argument is [1].
+if (typeof jsarguments !== "undefined" && jsarguments.length > 1) {
+  COMMAND = jsarguments[1];
+}
+
 function bang() {
   fire();
 }
