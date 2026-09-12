@@ -1,7 +1,8 @@
 # Keyboard / Stream Deck trigger — Max for Live device
 
 The extension listens on `http://127.0.0.1:17817/cmd`. A small Max for Live
-device reads which clip is selected and calls that URL. Live's Key Map and MIDI
+device (`device/cdp-all-tools.amxd`) reads which clip is selected and calls that
+URL. Live's Key Map and MIDI
 Map both target the device's button, which is how a keystroke or a Stream Deck
 key ends up running a CDP command.
 
@@ -57,52 +58,67 @@ last effect, or jump straight to one specific tool.
   default. Loopback binding is verified (`127.0.0.1` only; a LAN address is
   refused), so the residual risk is other local processes.
 
-## Building the device
+## The device
 
-**This part is not verified — Max was not available when this was written.** The
-endpoint and the path parsing are covered by tests; the patch below is a recipe
-to wire up and check, not something known-good. Build it in Max and use the
-`[print]` step to confirm what your Max version actually emits.
-
-1. In Live, drag **Max Audio Effect** onto any track, click the edit (pencil)
-   icon to open it in Max.
-2. Place these objects:
+`device/cdp-all-tools.amxd` — a Max **Audio Effect** with one button, plus
+`device/cdp-trigger.js` beside it.
 
 ```
-[live.text]                                   <- set Mode to "Button" in the
-    |                                            inspector, and switch
-    |                                            Parameter Visibility on so
-    |                                            Key Map / MIDI Map can see it
-[sel 1]
-    |
-[live.path live_set view detail_clip]
-    |   (the canonical-path outlet — see step 3)
-[print cdppath]
+[live.text "CDP All Tools"]   <- mappable: Key Map and MIDI Map both see it
+        |
+      [sel 1]                 <- only the non-zero value acts, so press+release
+        |                        is one dispatch
+[js cdp-trigger.js]           <- reads live_set view detail_clip, builds the URL
+        |            \
+    [maxurl]          \       <- performs the GET
+        |              \
+        +-------> [print CDP]  <- URL, reply, and any error land in the Max Console
 ```
 
-3. **Check what the path outlet emits.** Click the button and read the Max
-   Console. `live.path` has three outlets (id, canonical path, type) and the
-   exact message shape varies by Max version — you may see a bare list of
-   symbols, or one prefixed with `path`. If it is prefixed, insert
-   `[route path]` before continuing.
+`plugin~ -> plugout~` passes audio through untouched, so the device is safe
+anywhere in a chain.
 
-4. Replace `[print cdppath]` with the URL chain:
+### Install
+
+1. Copy **both** files into one folder — keep them together, since the `js`
+   object finds the script in the device's own folder. A good home is
+   `~/Music/Ableton/User Library/Presets/Audio Effects/Max Audio Effect/`.
+2. Drag `cdp-all-tools.amxd` onto any track in Live.
+3. Select an audio clip, then click the button — the All Tools Rack should open
+   on that clip.
+4. Once that works, bind it: **Key Map** (or **MIDI Map** for a Stream Deck key)
+   and click the device's button.
+
+### Changing what the button does
+
+Any registered command id works. Either edit `COMMAND` at the top of
+`cdp-trigger.js`, or send the `js` object a message at runtime:
 
 ```
-    |
-[tosymbol]                                    <- list of symbols -> one symbol
-    |
-[regexp " " @substitute ","]                  <- spaces -> commas (skip if your
-    |                                            chain already has no spaces)
-[sprintf http://127.0.0.1:17817/cmd?id=cdp.rack&path=%s]
-    |
-[maxurl]
-    |
-[print cdpreply]                              <- shows the JSON response
+[; cdp command cdp.repeatLast]
 ```
 
-5. Save the device. In Live, use **Key Map** (or **MIDI Map** for a Stream Deck
-   key) and click the device's button to bind it.
+`command` and `port` are both settable that way, so one device can be
+repurposed without rebuilding it.
+
+### Rebuilding
+
+`node device/build-device.mjs` regenerates the `.amxd` from Live's own empty
+Max Audio Effect. The builder documents the container layout, round-trips the
+result, and lints every patchline against its box's real inlet/outlet counts —
+Max silently drops an out-of-range connection, which would leave the device
+looking fine while doing nothing.
+
+### What is verified, and what is not
+
+Verified here: the container layout (header byte-identical in structure to
+Live's factory device, correct length field), the patcher round-trips and every
+patchline is valid, `maxurl`'s outlet count checked against two devices that use
+it, and the exact `%20`-encoded URL the script builds works against the real
+endpoint.
+
+**Not verified:** that Live instantiates the device and that `live.text` binds
+under Key/MIDI Map — that needs Live and Max, which is your step 3 above.
 
 ## Troubleshooting
 
@@ -111,9 +127,14 @@ to wire up and check, not something known-good. Build it in Max and use the
   `[cdp-for-live] command endpoint listening on http://127.0.0.1:17817/cmd`.
   A port conflict logs `command endpoint unavailable`, and by design the
   extension still loads with its context-menu actions working.
-- **`{"ok":false,"error":"unparseable LOM path: ..."}`** — the path chain is
-  sending something other than a clip path. Put `[print]` back in and compare
-  against `live_set tracks 7 arrangement_clips 0`.
+- **`[CDP] no clip selected`** in the Max Console — `live_set view detail_clip`
+  resolved to nothing. Click a clip first; the device reads Live's selection at
+  the moment you press the button.
+- **`[CDP] selection is not a clip on a track`** — the selection resolved to
+  something other than a track clip. The console line shows the actual path.
+- **Nothing in the console at all** — the `js` object did not load. Check that
+  `cdp-trigger.js` sits in the same folder as the `.amxd`, and look for a
+  "can't find file" error in the Max Console.
 - **`{"ok":false,"error":"clip not found"}`** — the path resolved to a track or
   slot with no audio clip. Selecting a MIDI clip gives this too.
 - **`{"error":"busy"}`** — a command is still in flight. Note that while a CDP
