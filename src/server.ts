@@ -1,3 +1,9 @@
+// Imported rather than taken from globalThis: the Extension Host's context does
+// not expose URL as a global, so `new URL(...)` throws "URL is not defined"
+// there even though node and tsx provide it. Covered by a test that deletes the
+// globals to reproduce the host.
+import { URL } from "url";
+
 /** Minimal shape of the things the dispatcher needs from the SDK context. */
 export interface ClipRef {
   handle: unknown;

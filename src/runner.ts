@@ -1,13 +1,13 @@
 import { spawn } from "child_process";
-import { existsSync, openSync, readSync, closeSync, unlinkSync } from "fs";
+import { existsSync, unlinkSync } from "fs";
 import { join, dirname, basename, extname } from "path";
-import { getCdpBinDir } from "./config.js";
+import { getCdpBinDir, getFfmpegPath, getFfprobePath, pathExists } from "./config.js";
 
 export async function runCdp(binary: string, args: string[]): Promise<void> {
   const binDir = getCdpBinDir();
   const binPath = join(binDir, binary);
 
-  if (!existsSync(binPath)) {
+  if (!pathExists(binPath)) {
     throw new Error(
       `CDP binary not found: ${binPath}\nSet CDP_BIN_DIR env or install CDP8 binaries.`
     );
@@ -29,7 +29,7 @@ export async function runCdp(binary: string, args: string[]): Promise<void> {
 
 async function runFfmpeg(args: string[]): Promise<void> {
   return new Promise((resolve, reject) => {
-    const proc = spawn("ffmpeg", args);
+    const proc = spawn(getFfmpegPath(), args);
     let stderr = "";
     proc.stderr.on("data", (d: Buffer) => (stderr += d.toString()));
     proc.on("close", (code) => {
@@ -44,7 +44,7 @@ async function runFfmpeg(args: string[]): Promise<void> {
 
 function runProbe(args: string[]): Promise<string> {
   return new Promise((resolve, reject) => {
-    const proc = spawn("ffprobe", args);
+    const proc = spawn(getFfprobePath(), args);
     let stdout = "";
     let stderr = "";
     proc.stdout.on("data", (d: Buffer) => (stdout += d.toString()));
@@ -119,14 +119,23 @@ export async function extractRegion(
   return outPath;
 }
 
-function getWavChannels(filePath: string): number {
-  const buf = Buffer.alloc(24);
-  const fd = openSync(filePath, "r");
-  readSync(fd, buf, 0, 24, 0);
-  closeSync(fd);
-  // WAV header bytes 22-23 = num channels as uint16LE
-  if (buf.slice(0, 4).toString("ascii") !== "RIFF") return 1;
-  return buf.readUInt16LE(22);
+/**
+ * Channel count of an audio file, via ffprobe rather than by reading the RIFF
+ * header ourselves. The source file is a Live clip's sample, which lives
+ * outside the sandbox the Extension Host grants us — Node's fs would throw
+ * ERR_ACCESS_DENIED on it, but a child process may read it. Also means this is
+ * no longer WAV-only.
+ */
+async function getChannelCount(filePath: string): Promise<number> {
+  const out = await runProbe([
+    "-v", "error",
+    "-select_streams", "a:0",
+    "-show_entries", "stream=channels",
+    "-of", "csv=p=0",
+    filePath,
+  ]);
+  const ch = parseInt(out.trim(), 10);
+  return isFinite(ch) && ch > 0 ? ch : 1;
 }
 
 function cleanup(...paths: string[]): void {
@@ -146,7 +155,7 @@ export async function runWithStereoSupport(
   tempDir: string,
   processor: (monoIn: string, monoOut: string) => Promise<void>
 ): Promise<void> {
-  const channels = getWavChannels(inputPath);
+  const channels = await getChannelCount(inputPath);
 
   if (channels === 1) {
     await processor(inputPath, outputPath);

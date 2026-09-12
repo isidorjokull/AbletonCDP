@@ -158,3 +158,23 @@ test("rejects a malformed LOM path", async () => {
   );
   assert.equal(res.status, 400);
 });
+
+test("works when URL is not a global, as in the Extension Host", async () => {
+  // The Extension Host's context does not expose URL/URLSearchParams globally:
+  // the real endpoint returned {"ok":false,"error":"URL is not defined"} while
+  // every test here passed, because node/tsx do expose them. Removing the
+  // globals reproduces the host.
+  const savedURL = (globalThis as { URL?: unknown }).URL;
+  const savedUSP = (globalThis as { URLSearchParams?: unknown }).URLSearchParams;
+  try {
+    delete (globalThis as { URL?: unknown }).URL;
+    delete (globalThis as { URLSearchParams?: unknown }).URLSearchParams;
+
+    const res = await handleCommandRequest("/cmd?id=cdp.rack&track=7&arr=0", {}, deps());
+    assert.equal(res.status, 200);
+    assert.equal(res.body.ok, true);
+  } finally {
+    (globalThis as { URL?: unknown }).URL = savedURL;
+    (globalThis as { URLSearchParams?: unknown }).URLSearchParams = savedUSP;
+  }
+});
