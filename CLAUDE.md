@@ -13,7 +13,7 @@ Guidance for Claude Code working in this repo. Facts here are **verified by runn
 
 ```bash
 npm run build      # tsc --noEmit (typecheck) + tsx build.ts (esbuild → dist/extension.js, CJS)
-npm test           # tsx --test tests/*.test.ts (endpoint, listener, LOM path, dispatcher)
+npm test           # tsx --test tests/*.test.ts (endpoint, listener, LOM path, dispatcher, rack state, runner)
 npx extensions-cli run --verbose   # load into Live; --verbose also shows host handshake lines
 ```
 Success looks like `activated: 98 tools + Rack + Repeat Last registered` in the host log.
@@ -53,7 +53,7 @@ Param types: `slider` | `select` | `check` | `text`. Sliders support `log` mappi
 
 ## Testing
 
-`npm test` runs `tsx --test tests/*.test.ts` (node:test via tsx — no framework dependency). 29 tests cover the endpoint, the listener, the LOM path parser and the clip resolver, all without Live.
+`npm test` runs `tsx --test tests/*.test.ts` (node:test via tsx — no framework dependency). 39 tests cover the endpoint, the listener, the LOM path parser, the clip resolver, Rack open/close state and the runner helpers, all without Live.
 
 For CDP tools themselves, no framework. Use tsx harnesses in the scratchpad that import the real `src/tools/*` and run against CDP binaries on `scratchpad/audio/*.wav` (mono.wav / stereo.wav), asserting channel counts and RMS (via ffmpeg `astats`). Dialog logic is tested with **jsdom** (`runScripts: "dangerously"`, stub `window.webkit`), asserting mode-switch visibility and `collect()` payloads.
 

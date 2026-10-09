@@ -2,7 +2,7 @@
 
 Bring the **Composers Desktop Project** (CDP Release 8) sound-transformation toolkit into **Ableton Live 12** as right-click actions on any audio clip. Select a clip, pick an effect from the context menu, tweak a few knobs, and Live replaces the clip in place — while quietly backing up your original to a take lane so nothing is ever lost.
 
-Built on the **Ableton Extensions SDK** (beta). The extension shells out to your local CDP binaries; no plugins, no bouncing to disk by hand.
+Built on the **Ableton Extensions SDK** (1.0.0-beta.1). The extension shells out to your local CDP binaries; no plugins, no bouncing to disk by hand.
 
 ---
 
@@ -14,6 +14,7 @@ Built on the **Ableton Extensions SDK** (beta). The extension shells out to your
 - **Stereo-safe.** Stereo-native CDP tools run directly; the rest are split to mono, processed per channel, and re-interleaved.
 - **Modular-synth-flavoured UI** with per-effect documentation built into each dialog, a 🎲 **Randomize** button, and a searchable Rack with Recent + Tweak-last.
 - **One-click repeat & hardware triggering.** `CDP: Repeat Last` re-applies your last effect + parameters with no dialog (persists across restarts), and `automation/cdp-trigger.sh` fires any CDP menu item (including the All Tools Rack) from a keyboard shortcut, Stream Deck key, or Bitfocus Companion button — see [`automation/`](automation/README.md).
+- **In-Live trigger button.** A loopback endpoint (`127.0.0.1:17817`) plus a Max for Live device (`device/cdp-all-tools.amxd`) give you on-screen buttons that Live's Key Map and MIDI Map can bind, so a key or MIDI note can open the Rack or repeat the last action on the selected clip — see [`docs/M4L-DEVICE.md`](docs/M4L-DEVICE.md).
 
 ### The effects
 
@@ -35,7 +36,7 @@ Built on the **Ableton Extensions SDK** (beta). The extension shells out to your
 - **macOS** (developed on Apple Silicon; CDP runs x86_64 under Rosetta 2).
 - **Ableton Live 12 Beta** in developer mode, with the Extensions SDK.
 - **CDP Release 8 binaries** installed locally (default lookup: `~/cdpr8/_cdp/_cdprogs`).
-- **ffmpeg / ffprobe** on `PATH` (used for format conversion, region extraction, and stereo splitting).
+- **ffmpeg / ffprobe** (e.g. `brew install ffmpeg`; found automatically in the usual Homebrew locations, or set `FFMPEG_PATH` / `FFPROBE_PATH`). Used for format conversion, region extraction, and stereo splitting.
 - **Node.js** (v24+) and npm.
 
 ---
@@ -46,6 +47,7 @@ Built on the **Ableton Extensions SDK** (beta). The extension shells out to your
 npm install
 npm run build        # typecheck + bundle to dist/extension.js
 npm run start        # build, then launch the Extension Host
+npm test             # unit tests (endpoint, listener, LOM path, dispatcher, rack state, runner)
 ```
 
 Configuration:
@@ -53,7 +55,19 @@ Configuration:
 - **CDP binary directory** — auto-detected; override with the `CDP_BIN_DIR` environment variable.
 - **Extension Host path** — set `EXTENSION_HOST_PATH` in `.env` (points at Live's bundled `ExtensionHost`).
 
-When the host starts you should see `activated: 24 tools + Rack registered` in its log. In Live, right-click any audio clip → the **CDP** actions appear in the context menu.
+When the host starts you should see `activated: 98 tools + Rack + Repeat Last registered` in its log. In Live, right-click any audio clip → the **CDP** actions appear in the context menu.
+
+---
+
+### Installing for everyday use
+
+Under beta.1 the dev CLI (`npm run start`) kills the host after ~10 s, so anything interactive (dialogs, the trigger device) should be tested from a packaged install:
+
+```bash
+npx extensions-cli package . -o cdp-for-live.ablx -i vendor
+```
+
+Install the resulting `.ablx` through Live; the host log is `~/Library/Preferences/Ableton/Live <version>/ExtensionHost.txt`. See [`DISTRIBUTION.md`](DISTRIBUTION.md) for what a recipient needs.
 
 ---
 
@@ -68,6 +82,8 @@ import into project → replace clip in place (original → CDP Originals take l
 - **`src/ui/dialog.ts`** — shared styling and a small client-side parameter engine (sliders, selects, toggles, mode-dependent controls) plus the All Tools grid.
 - **`src/extension.ts`** — registers the menu actions, extracts the played region, runs the tool, and handles the non-destructive replace-and-backup.
 - **`src/runner.ts`** — CDP/ffmpeg process helpers, including the mono-split stereo wrapper.
+- **`src/server.ts`, `src/dispatch.ts`, `src/rackState.ts`** — the loopback command endpoint used by the Max for Live trigger device, its SDK adapter, and Rack open/close state.
+- **`device/`** — the Max for Live trigger device and its generator script.
 - **`src/tools/*.ts`** — one module per effect.
 
 ### Adding or editing a tool
@@ -83,6 +99,14 @@ Add an entry to `TOOLS` in `src/tools/registry.ts` (id, group, blurb, docs, para
 - Warped-clip region extraction converts beats→seconds using the global tempo, so heavily warped clips may extract a slightly off region. Unwarped clips are exact.
 
 ---
+
+## More documentation
+
+- [`CLAUDE.md`](CLAUDE.md) — verified architecture, CDP quirks and gotchas (the authoritative developer reference).
+- [`docs/M4L-DEVICE.md`](docs/M4L-DEVICE.md) — trigger endpoint wire contract and the Max device.
+- [`docs/SDK-MAX-BUTTON-SPEC.md`](docs/SDK-MAX-BUTTON-SPEC.md) — reusable spec for SDK-triggering Max buttons.
+- [`docs/CDP-SHORTLIST.md`](docs/CDP-SHORTLIST.md) — CDP processes considered, built, and deliberately skipped.
+- [`DISTRIBUTION.md`](DISTRIBUTION.md) — feasibility notes for sharing the extension.
 
 ## Project notes
 

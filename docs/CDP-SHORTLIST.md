@@ -1,6 +1,6 @@
 # CDP shortlist — unused processes worth adding
 
-Compiled 2026-10-04 from the local CDP docs (`~/cdpr8/docs/html/*.htm`) and online sources, compared against the 47 tools in `src/tools/registry.ts`.
+Compiled 2026-10-04 from the local CDP docs (`~/cdpr8/docs/html/*.htm`) and online sources, compared against the 47 tools then in `src/tools/registry.ts` (the registry now has 98 — see Status below).
 
 **Nothing here has been run.** All syntax is copied from the docs; arg order, stereo behaviour and output length are unverified. Before building any of these, verify on `mono.wav` and `stereo.wav`.
 
