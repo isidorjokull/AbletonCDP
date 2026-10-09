@@ -110,15 +110,18 @@ for (const b of buttons) {
   });
 
   box({ maxclass: "newobj", id: b.js, text: `js cdp-trigger.js ${b.command}`,
-        numinlets: 1, numoutlets: 2, outlettype: ["", ""],
+        numinlets: 1, numoutlets: 3, outlettype: ["", "", ""],
         patching_rect: [48.0, b.y + 30, 190.0, 22.0], fontsize: 11.0 });
 
   // Straight to the script - no [sel 1]. A momentary live.text click sends a
-  // BANG, which [sel 1] silently swallowed; the script debounces instead, so it
+  // BANG, which [sel 1] silently swallowed; the script filters instead, so it
   // works whichever shape the button emits.
   connect(b.id, 0, b.js);
   connect(b.js, 0, "obj-13"); // URL    -> maxurl (shared)
   connect(b.js, 1, "obj-14"); // status -> console (shared)
+  // "set 0" back into the button. Key Map / MIDI Map toggle the parameter, so
+  // without this the button latches on and the next key press does nothing.
+  connect(b.js, 2, b.id);
 }
 
 // maxurl has 2 outlets, not 3 - checked against Swiss Army Meter.amxd and
@@ -196,6 +199,16 @@ for (const btn of btns) {
   else if (!String(destBox.text ?? "").startsWith("js ")) {
     problems.push(`${btn.id} ("${btn.text}") feeds "${destBox.text}" instead of the js object - a value filter drops the bang`);
   }
+}
+
+// Each button needs its script's reset outlet wired back into it. Without it,
+// a key-mapped button toggles on, stays lit, and the next press is swallowed.
+for (const btn of btns) {
+  const jsId = back.lines.find((l) => l.patchline.source[0] === btn.id)?.patchline.destination[0];
+  const reset = back.lines.some(
+    (l) => l.patchline.source[0] === jsId && l.patchline.source[1] === 2 && l.patchline.destination[0] === btn.id,
+  );
+  if (!reset) problems.push(`${btn.id} ("${btn.text}") has no reset line (js outlet 2 -> button); key presses would latch`);
 }
 
 // Every js object must carry a command argument, or it silently defaults.

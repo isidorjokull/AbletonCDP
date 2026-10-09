@@ -25,7 +25,7 @@
 #   1. In Companion: Settings > enable the option that allows shell commands
 #      ("Run shell path" is gated for safety).
 #   2. Add a button > action "internal: System: Run shell path (local)" with:
-#        /bin/bash /Users/isidor/git/ableton_cdp/automation/cdp-trigger.sh "CDP: All Tools…"
+#        /bin/bash /path/to/ableton_cdp/automation/cdp-trigger.sh "CDP: All Tools…"
 #   3. Grant Companion.app Accessibility permission (step 2 above).
 #   Companion must run on this Mac; if it runs elsewhere, use its ssh action
 #   (or Generic module) to invoke the same command over ssh to this machine.

@@ -8,7 +8,7 @@ Built on the **Ableton Extensions SDK** (beta). The extension shells out to your
 
 ## Features
 
-- **35 CDP effects** grouped into a clip context menu, plus an **All Tools** rack that opens a grid of every effect and lets you **chain** processing without leaving the panel.
+- **98 CDP effects** grouped into a clip context menu, plus an **All Tools** rack that opens a grid of every effect and lets you **chain** processing without leaving the panel.
 - **Non-destructive by default.** The processed audio replaces the clip in place; the original is moved to a `CDP Originals` take lane. A fresh lane is created whenever the previous backup slot is occupied, so backups never overwrite each other. The clip's colour is preserved.
 - **Region-aware.** Only the portion of the file the clip actually plays is processed, not the whole underlying sample.
 - **Stereo-safe.** Stereo-native CDP tools run directly; the rest are split to mono, processed per channel, and re-interleaved.
@@ -19,12 +19,12 @@ Built on the **Ableton Extensions SDK** (beta). The extension shells out to your
 
 | Group | Tools |
 |-------|-------|
-| **Time & Pitch** | Pitch Shift · Time Stretch · Granular · **Brassage** · Echo |
-| **Spectral** | Spectral Freeze · Spectral Blur · Spectral Chorus · Spectral Stretch · Spectral Sustain · Spectral Fold · **Frequency Shifter** |
-| **Waveset & Distort** | Overload · Fractal · Waveset Repeat · Waveset Reverse · Waveset Divide · Waveset Interpolate · Waveset Telescope · Waveset Omit |
-| **Cut & Shuffle** | Bounce · Scramble · Constrict · Zigzag · Iteration Freeze |
-| **Envelope** | **Envelope Trigger** · Envelope Warp · Tremolo · Swell · Peak Chop |
-| **Ambient & Space** | Reverb · Spectral Drunk · Spectral Spread · **Glisten** · **Hover** |
+| **Time & Pitch** | Pitch Shift · Time Stretch · Granular · **Brassage** · Echo · Stack · Vari-speed · Spectral Chord |
+| **Spectral** | Spectral Freeze · Spectral Blur · Spectral Chorus · Spectral Stretch · Spectral Sustain · Spectral Fold · **Frequency Shifter** · Spectral Scatter · Spectral Noise · Spectral Shuffle · Spectral Exaggerate · Spectral Step · Spectral Arpeggio · Spectral Invert · Spectral Waver · Spectral Glide · Spectral Trace · Spectral Roughen · Inharmonic Stretch · Formants · Spectral Randomise · Spectral Top Blur |
+| **Waveset & Distort** | Overload · Fractal · Waveset Repeat · Waveset Reverse · Waveset Divide · Waveset Interpolate · Waveset Telescope · Waveset Omit · Bitcrush · Ring Mod · Waveset Multiply · Waveset Reform · Waveset Average · Waveset Pitch · Waveset Envelope · Waveset Harmonics · Waveset Hold · Waveset Delete · Waveset Shuffle · Waveset Gate · Pulse Train · Quirk · Clip · Waveset Octave · Waveset Shift · Waveset Warp · Waveset Stretch · Fractal Wave |
+| **Cut & Shuffle** | Bounce · Scramble · Constrict · Zigzag · Iteration Freeze · Shred · Scrub · Cantor · Iterate · Fugu · Advancing Loop · Doublets · Grain Reorder · Cascade · Sorter · Splinter |
+| **Envelope** | **Envelope Trigger** · Envelope Warp · Tremolo · Swell · Peak Chop · Shudder |
+| **Ambient & Space** | Reverb · Spectral Drunk · Spectral Spread · **Glisten** · **Hover** · Delay · Resonant Delay · Phaser · Sweep Filter · Spectral Weave · Spectral Hold · Drunk Walk · Self-similar · Tune to Chord · Hover 2 · Room Reverb · Tap Delay · Stereo Spin |
 
 **Envelope Trigger** is a generative gate: it synthesises its own amplitude envelope and re-triggers the clip in a rhythm you design — **Beat sync** (locked to Live's tempo), **Time** (fixed seconds), **Random** (scattered hits), or **Bounce** (bouncing-ball spacing that accelerates or decelerates). Attack, Release, and Floor shape each hit. No donor file required.
 
@@ -79,7 +79,7 @@ Add an entry to `TOOLS` in `src/tools/registry.ts` (id, group, blurb, docs, para
 ## Known limitations
 
 - **Beat-synced** envelope hits align to the clip/region **start**, not the arrangement's bar grid — the SDK doesn't expose bar phase.
-- The extension's UI is **modal only** (an SDK constraint): the transport can't play while a dialog is open, and the "stay open" Rack is emulated by reopening the dialog after each process.
+- The extension's UI is **modal only** (an SDK constraint): the transport can't play while a dialog is open, and so the Rack closes after each process to let you audition the result (the Max trigger button reopens it, and closes it again if pressed while it is open).
 - Warped-clip region extraction converts beats→seconds using the global tempo, so heavily warped clips may extract a slightly off region. Unwarped clips are exact.
 
 ---

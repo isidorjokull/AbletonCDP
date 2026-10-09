@@ -224,24 +224,36 @@ A momentary `live.text` click sends a **bang** — its reference says
 *"(mouse) — Highlight the text, send the text and a bang"* — while toggle mode
 sends `1` then `0`. Any value filter such as `[sel 1]` matches one shape and
 **silently swallows** the other, leaving a dead device with nothing in the Max
-Console. Do not put one in the path. Debounce in the script instead:
+Console. Do not put one in the path. Filter and debounce in the script instead.
+
+**Key Map and MIDI Map do not press the button — they TOGGLE its parameter.**
+A key press flips the value 0 → 1 (fires) and leaves it at 1: the button stays
+lit, and the next press flips it 1 → 0, which a Button-mode `live.text` does not
+turn into a trigger. The user sees a latched button and every other key press
+doing nothing. So the script ignores `0`, and after firing puts the button back
+to `0` with **`set 0`** (changes the value, sends no output) through a third
+outlet wired back into the button:
 
 ```js
+outlets = 3;                              // 0 URL, 1 status, 2 reset -> button
 var DEBOUNCE_MS = 150, lastFire = 0;
+var resetTask = new Task(function () { outlet(2, "set", 0); });
 function triggered() {
   var now = new Date().getTime();
   if (now - lastFire < DEBOUNCE_MS) return;
   lastFire = now;
   fire();
+  resetTask.cancel();
+  resetTask.schedule(30);                 // deferred, not inside the mapping's own change
 }
-function bang()      { triggered(); }
-function msg_int()   { triggered(); }
-function msg_float() { triggered(); }
-function anything()  { triggered(); }
+function bang()       { triggered(); }
+function msg_int(v)   { if (v !== 0) triggered(); }
+function msg_float(v) { if (v !== 0) triggered(); }
+function anything()   { triggered(); }
 ```
 
-That fires exactly once for a bang, a `1`, or a `1`/`0` pair — no dependence on
-a shape you cannot test without Max.
+That fires exactly once per mouse click, per key press and per MIDI press, and
+the button is always back at `0` for the next one.
 
 ### 3.4 Read the selection and call the endpoint
 
@@ -294,6 +306,8 @@ looking correct and does nothing. If you generate the patcher, assert:
 - `parameter_initial_enable` falsy
 - each `js` object carries its command argument
 - each button connects **directly** to a `js` object (no value filter)
+- each `js` object's outlet 2 (`set 0` reset) connects **back** into its button,
+  or key-mapped presses latch
 
 ### 3.6 Shipping
 

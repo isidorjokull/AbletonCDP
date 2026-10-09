@@ -9,9 +9,10 @@
 //
 // Outlet 0: the URL, to [maxurl]
 // Outlet 1: a status string, for [print]
+// Outlet 2: "set 0", back into the button, so it never stays latched
 
 autowatch = 1;
-outlets = 2;
+outlets = 3;
 
 // Must match the extension: see src/server.ts DEFAULT_PORT.
 var PORT = 17817;
@@ -28,10 +29,15 @@ if (typeof jsarguments !== "undefined" && jsarguments.length > 1) {
   COMMAND = jsarguments[1];
 }
 
-// live.text's output shape depends on its mode: a mouse click in momentary
-// (mode 0) sends a BANG, while toggle mode sends 1 then 0. Rather than filter
-// on one shape and break on the other, accept anything the button sends and
-// debounce, so a 1/0 pair still fires exactly once.
+// A mouse click in Button mode sends a BANG. Live's Key Map and MIDI Map do not
+// press the button: they TOGGLE its parameter, 0 -> 1 -> 0. The 1 fires; the 0
+// that the next key press would produce fires nothing, which is why the button
+// used to stay lit and every other key press did nothing.
+//
+// So: fire on a bang or any non-zero value, ignore 0, and after firing put the
+// button back to 0 with "set 0" (changes the value, sends no output), so the
+// next key press is always 0 -> 1 again. The debounce still collapses a mouse
+// bang arriving together with a value.
 var DEBOUNCE_MS = 150;
 var lastFire = 0;
 
@@ -40,18 +46,30 @@ function triggered() {
   if (now - lastFire < DEBOUNCE_MS) return;
   lastFire = now;
   fire();
+  scheduleReset();
+}
+
+// Deferred rather than sent inline: resetting the parameter from inside the
+// callback Live's mapping just drove can be overwritten by that same change.
+var resetTask = new Task(function () {
+  outlet(2, "set", 0);
+});
+
+function scheduleReset() {
+  resetTask.cancel();
+  resetTask.schedule(30);
 }
 
 function bang() {
   triggered();
 }
 
-function msg_int() {
-  triggered();
+function msg_int(v) {
+  if (v !== 0) triggered();
 }
 
-function msg_float() {
-  triggered();
+function msg_float(v) {
+  if (v !== 0) triggered();
 }
 
 // Any other message from the button (e.g. its label symbol) also triggers;

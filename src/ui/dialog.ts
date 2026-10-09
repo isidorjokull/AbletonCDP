@@ -288,6 +288,11 @@ export interface AllDialogState {
   clipName: string;
   /** Most-recently used tool ids, newest first (for the Recent row + Tweak-last). */
   recent: string[];
+  /**
+   * Long-poll URL on the command endpoint; when it answers, the page closes
+   * itself (the trigger button's "toggle off"). Null when the endpoint is down.
+   */
+  closeUrl?: string | null;
 }
 
 export function renderAllDialog(tools: ToolSpec[], state: AllDialogState): string {
@@ -408,6 +413,14 @@ elBack.addEventListener('click',showGrid);
 elRnd.addEventListener('click',function(){if(curId)randomize(paramBox,byId(curId).params)});
 function ok(){if(!curId)return;send({method:'close_and_send',params:[JSON.stringify({tool:curId,params:collectFrom(paramBox)})]})}
 function closeIt(){send({method:'close_and_send',params:[JSON.stringify(null)]})}
+// Toggle-off: wait on the endpoint; its answer means the trigger was pressed
+// again. A failed fetch (endpoint restarting) retries after a pause.
+(function waitClose(){
+  if(!STATE.closeUrl||typeof fetch!=='function')return;
+  fetch(STATE.closeUrl,{cache:'no-store'}).then(function(r){return r.json()}).then(function(j){
+    if(j&&j.close)closeIt();else setTimeout(waitClose,1000);
+  },function(){setTimeout(waitClose,2000)});
+})();
 document.getElementById('ok').addEventListener('click',ok);
 document.getElementById('close').addEventListener('click',closeIt);
 document.addEventListener('keydown',function(e){

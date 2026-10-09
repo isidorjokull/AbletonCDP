@@ -178,3 +178,46 @@ test("works when URL is not a global, as in the Extension Host", async () => {
     (globalThis as { URLSearchParams?: unknown }).URLSearchParams = savedUSP;
   }
 });
+
+test("a press while the Rack is open toggles it off instead of dispatching", async () => {
+  let executed = false;
+  let resolved = false;
+  const res = await handleCommandRequest(
+    "/cmd?id=cdp.rack&track=0&arr=0",
+    {},
+    deps({
+      toggleOff: (id) => id === "cdp.rack",
+      resolveClip: () => { resolved = true; return null; },
+      execute: () => { executed = true; },
+    }),
+  );
+
+  assert.equal(res.status, 200);
+  assert.equal(res.body.toggled, "closed");
+  assert.equal(executed, false);
+  assert.equal(resolved, false, "closing must not depend on the selection");
+});
+
+test("/dialog/wait answers once a close is requested, with CORS for the dialog", async () => {
+  let release!: () => void;
+  const pending = handleCommandRequest(
+    "/dialog/wait",
+    { origin: "null" }, // a data: URL page
+    deps({ waitForDialogClose: () => new Promise<void>((r) => { release = r; }) }),
+  );
+  let settled = false;
+  void pending.then(() => { settled = true; });
+  await new Promise((r) => setImmediate(r));
+  assert.equal(settled, false, "must hold until a close is requested");
+
+  release();
+  const res = await pending;
+  assert.equal(res.status, 200);
+  assert.equal(res.body.close, true);
+  assert.equal(res.headers?.["access-control-allow-origin"], "*");
+});
+
+test("an Origin header is still refused on /cmd", async () => {
+  const res = await handleCommandRequest("/cmd?id=cdp.rack&track=0&arr=0", { origin: "null" }, deps());
+  assert.equal(res.status, 403);
+});

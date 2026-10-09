@@ -24,7 +24,6 @@ export function getCdpBinDir(): string {
   if (process.env["CDP_BIN_DIR"]) return process.env["CDP_BIN_DIR"];
 
   const candidates = [
-    "/Users/isidor/cdpr8/_cdp/_cdprogs",
     `${process.env["HOME"]}/cdpr8/_cdp/_cdprogs`,
     `${process.env["HOME"]}/CDP8/build/bin`,
     `${process.env["HOME"]}/CDP8/bin`,

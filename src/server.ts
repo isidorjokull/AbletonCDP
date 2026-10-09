@@ -25,11 +25,24 @@ export interface Dispatcher {
    * for as long as it is unsettled.
    */
   execute(id: string, handle: unknown): void | Promise<void>;
+  /**
+   * Toggle hook, checked before the clip is resolved. Returns true if `id` is
+   * already running (e.g. the Rack is open) and was asked to close instead, so
+   * the trigger button acts as open/close.
+   */
+  toggleOff?(id: string): boolean;
+  /**
+   * Resolves when an open dialog should close itself. Backs `/dialog/wait`,
+   * which the Rack long-polls: the SDK cannot close a modal from outside, but
+   * the page can post close_and_send once this settles.
+   */
+  waitForDialogClose?(): Promise<void>;
 }
 
 export interface CommandResponse {
   status: number;
   body: { ok: boolean; [k: string]: unknown };
+  headers?: Record<string, string>;
 }
 
 /**
@@ -98,12 +111,24 @@ export async function handleCommandRequest(
   deps: Dispatcher,
   token?: string,
 ): Promise<CommandResponse> {
+  const parsed = new URL(url, "http://127.0.0.1");
+
+  // The one route a web page may call: the Rack dialog (a data: URL, so its
+  // Origin is "null") waits here to be told to close. It only ever reads.
+  if (parsed.pathname === "/dialog/wait" && deps.waitForDialogClose) {
+    await deps.waitForDialogClose();
+    return {
+      status: 200,
+      body: { ok: true, close: true },
+      headers: { "access-control-allow-origin": "*" },
+    };
+  }
+
   // A browser fetch/XHR always sets Origin, so this blocks a web page from
   // driving the endpoint while leaving [maxurl] and curl unaffected.
   if (headers["origin"] !== undefined) {
     return { status: 403, body: { ok: false, error: "origin not allowed" } };
   }
-  const parsed = new URL(url, "http://127.0.0.1");
   if (parsed.pathname !== "/cmd") {
     return { status: 404, body: { ok: false, error: "unknown endpoint" } };
   }
@@ -116,6 +141,11 @@ export async function handleCommandRequest(
   const id = q.get("id") ?? "";
   if (!deps.isRegistered(id)) {
     return { status: 400, body: { ok: false, error: `unknown command id: ${id}` } };
+  }
+
+  // Before clip resolution: closing must not depend on what is selected.
+  if (deps.toggleOff?.(id)) {
+    return { status: 200, body: { ok: true, id, toggled: "closed" } };
   }
 
   // `path` is what the Max device sends: live.path's canonical path, verbatim.
@@ -210,7 +240,7 @@ export async function startCdpServer(
         out = { status: 500, body: { ok: false, error: msg } };
       }
 
-      res.writeHead(out.status, { "content-type": "application/json" });
+      res.writeHead(out.status, { "content-type": "application/json", ...out.headers });
       res.end(JSON.stringify(out.body));
     })();
   });

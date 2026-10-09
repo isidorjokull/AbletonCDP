@@ -17,3 +17,10 @@ dist/
 extensions-sdk-1.0.0-beta.0/api/
 extensions-sdk-1.0.0-beta.0/docs/
 extensions-sdk-1.0.0-beta.0/examples/
+extensions-sdk-1.0.0-beta.1/api/
+extensions-sdk-1.0.0-beta.1/docs/
+extensions-sdk-1.0.0-beta.1/examples/
+extensions-sdk-1.0.0-beta.1/upgrade.md
+
+# Personal Ableton test project
+ableton_cdp_testsession Project/
