@@ -4,7 +4,7 @@ import { spectralFreeze } from "./spectral-freeze.js";
 import { granular } from "./granular.js";
 import { imposeEnvelope, type EnvSync, type RunCtx } from "./impose-envelope.js";
 import { bounce } from "./bounce.js";
-import { scramble } from "./scramble.js";
+import { scramble, type ScrambleMethod } from "./scramble.js";
 import { constrict } from "./constrict.js";
 import { zigzag, type ZigPath } from "./zigzag.js";
 import { iterationFreeze } from "./iteration-freeze.js";
@@ -252,16 +252,54 @@ export const TOOLS: ToolSpec[] = [
   {
     id: "cdp.scramble", title: "Scramble", group: "Cut & Shuffle",
     blurb: "Random chunks reassembled into a new timeline.",
-    docs: "Cuts the clip into random-length chunks and reshuffles them to fill the output length. Min and max chunk set the grain of the chaos — small values granulate, large values shuffle whole phrases. Re-run for a different scramble each time.",
+    docs: "Random chunks cuts pieces anywhere in the clip and splices them end to end; Shuffle cuts the whole clip into chunks and rearranges all of them, again and again. Chunk sizes set the grain — small values granulate, large values shuffle whole phrases. Different every run.",
     params: [
-      { key: "minSeg", label: "Min chunk", type: "slider", min: 0.05, max: 5, step: 0.05, def: 0.1, unit: " s" },
-      { key: "maxSeg", label: "Max chunk", type: "slider", min: 0.1, max: 10, step: 0.1, def: 0.4, unit: " s" },
+      {
+        key: "method", label: "Method", type: "select", def: "chunks",
+        options: [
+          { value: "chunks", label: "Random chunks — pieces from anywhere" },
+          { value: "shuffle", label: "Shuffle — rearrange the whole clip" },
+        ],
+      },
+      {
+        key: "minSeg", label: "Min chunk", type: "slider", min: 0.05, max: 5, step: 0.05, def: 0.1, unit: " s", modeKey: "method",
+        modeCfg: {
+          chunks: { label: "Min chunk", min: 0.05, max: 5, step: 0.05, def: 0.1 },
+          shuffle: { label: "", min: 0.05, max: 5, step: 0.05, def: 0.1, hide: true },
+        },
+      },
+      {
+        key: "maxSeg", label: "Max chunk", type: "slider", min: 0.1, max: 10, step: 0.1, def: 0.4, unit: " s", modeKey: "method",
+        modeCfg: {
+          chunks: { label: "Max chunk", min: 0.1, max: 10, step: 0.1, def: 0.4 },
+          shuffle: { label: "", min: 0.1, max: 10, step: 0.1, def: 0.4, hide: true },
+        },
+      },
+      {
+        key: "seglen", label: "Chunk", type: "slider", min: 0.02, max: 5, step: 0.01, def: 0.2, unit: " s", log: true, modeKey: "method",
+        modeCfg: {
+          chunks: { label: "", min: 0.02, max: 5, step: 0.01, def: 0.2, hide: true },
+          shuffle: { label: "Average chunk", min: 0.02, max: 5, step: 0.01, def: 0.2 },
+        },
+      },
+      {
+        key: "scatter", label: "Scatter", type: "slider", min: 0, max: 8, step: 0.1, def: 0.5, modeKey: "method",
+        modeCfg: {
+          chunks: { label: "", min: 0, max: 8, step: 0.1, def: 0.5, hide: true },
+          shuffle: { label: "Length scatter", min: 0, max: 8, step: 0.1, def: 0.5 },
+        },
+      },
       { key: "outDur", label: "Output length", type: "slider", min: 1, max: 60, step: 1, def: 8, unit: " s" },
+      { key: "keepStart", label: "Start with the clip's start", type: "check", def: false },
+      { key: "keepEnd", label: "End with the clip's end", type: "check", def: false },
     ],
     run: (i, p, td) => scramble(i, {
       minSeg: Math.min(n(p.minSeg), n(p.maxSeg)),
       maxSeg: Math.max(n(p.minSeg), n(p.maxSeg)),
       outDur: n(p.outDur),
+      method: (p.method ?? "chunks") as ScrambleMethod,
+      seglen: n(p.seglen ?? 0.2), scatter: n(p.scatter ?? 0.5),
+      keepStart: Boolean(p.keepStart), keepEnd: Boolean(p.keepEnd),
     }, td),
   },
   {
