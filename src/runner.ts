@@ -73,6 +73,40 @@ function runProbe(args: string[]): Promise<string> {
   });
 }
 
+/** A peak scan that takes longer than this is abandoned (it only decorates a dialog). */
+const PEAKS_TIMEOUT_MS = 3000;
+
+/**
+ * Peak level of `buckets` equal slices of a region, normalised to the loudest
+ * slice (silence stays 0). Decodes to mono 4 kHz float on stdout.
+ */
+export function getPeaks(filePath: string, start: number, dur: number, buckets: number): Promise<number[]> {
+  return new Promise((resolve, reject) => {
+    const proc = spawn(getFfmpegPath(), [
+      "-v", "error", "-ss", String(start), "-t", String(dur), "-i", filePath,
+      "-ac", "1", "-ar", "4000", "-f", "f32le", "-",
+    ]);
+    const chunks: Buffer[] = [];
+    const timer = setTimeout(() => proc.kill("SIGKILL"), PEAKS_TIMEOUT_MS);
+    proc.stdout.on("data", (d: Buffer) => chunks.push(d));
+    proc.on("error", (err) => { clearTimeout(timer); reject(new Error(`Failed to spawn ffmpeg: ${err.message}`)); });
+    proc.on("close", (code) => {
+      clearTimeout(timer);
+      if (code !== 0) return reject(new Error(`ffmpeg peaks exited ${code}`));
+      const buf = Buffer.concat(chunks);
+      const n = Math.floor(buf.length / 4);
+      const peaks = new Array<number>(buckets).fill(0);
+      for (let i = 0; i < n; i++) {
+        const b = Math.min(buckets - 1, Math.floor((i * buckets) / n));
+        const a = Math.abs(buf.readFloatLE(i * 4));
+        if (a > peaks[b]!) peaks[b] = a;
+      }
+      const max = Math.max(...peaks);
+      resolve(max > 0 ? peaks.map((p) => p / max) : peaks);
+    });
+  });
+}
+
 /** Duration of an audio file in seconds. */
 export async function getAudioDuration(filePath: string): Promise<number> {
   const out = await runProbe([
