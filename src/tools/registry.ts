@@ -6,7 +6,7 @@ import { imposeEnvelope, type EnvSync, type RunCtx } from "./impose-envelope.js"
 import { bounce } from "./bounce.js";
 import { scramble } from "./scramble.js";
 import { constrict } from "./constrict.js";
-import { zigzag } from "./zigzag.js";
+import { zigzag, type ZigPath } from "./zigzag.js";
 import { iterationFreeze } from "./iteration-freeze.js";
 import { overload } from "./overload.js";
 import { fractal } from "./fractal.js";
@@ -274,14 +274,69 @@ export const TOOLS: ToolSpec[] = [
   {
     id: "cdp.zigzag", title: "Zigzag", group: "Cut & Shuffle",
     blurb: "Playback wanders back and forth inside a time window.",
-    docs: "Reads back and forth across a chosen window of the clip, ping-ponging to fill the output length. Window start/end pick the source region; min zig sets the shortest back-and-forth segment — small values stutter, large values sweep. A stammering, tape-abuse effect.",
+    docs: "Reads back and forth inside a window of the clip. Random ping-pongs to fill the output length; Rock sweeps end to end; Walk crawls forward two steps, back one; Scatter jumps between random points.",
     params: [
+      {
+        key: "path", label: "Path", type: "select", def: "random",
+        options: [
+          { value: "random", label: "Random — fill an output length" },
+          { value: "rock", label: "Rock — end to end" },
+          { value: "walk", label: "Walk — two steps on, one back" },
+          { value: "scatter", label: "Scatter — random turning points" },
+        ],
+      },
       { key: "start", label: "Window start", type: "slider", min: 0, max: 30, step: 0.1, def: 0, unit: " s" },
       { key: "end", label: "Window end", type: "slider", min: 0.1, max: 30, step: 0.1, def: 2, unit: " s" },
-      { key: "outDur", label: "Output length", type: "slider", min: 1, max: 60, step: 1, def: 6, unit: " s" },
-      { key: "minZig", label: "Min zig", type: "slider", min: 0.02, max: 0.5, step: 0.02, def: 0.1, unit: " s" },
+      {
+        key: "outDur", label: "Output length", type: "slider", min: 1, max: 60, step: 1, def: 6, unit: " s", modeKey: "path",
+        modeCfg: {
+          random: { label: "Output length", min: 1, max: 60, step: 1, def: 6 },
+          rock: { label: "", min: 1, max: 60, step: 1, def: 6, hide: true },
+          walk: { label: "", min: 1, max: 60, step: 1, def: 6, hide: true },
+          scatter: { label: "", min: 1, max: 60, step: 1, def: 6, hide: true },
+        },
+      },
+      {
+        key: "minZig", label: "Min zig", type: "slider", min: 0.02, max: 0.5, step: 0.02, def: 0.1, unit: " s", modeKey: "path",
+        modeCfg: {
+          random: { label: "Min zig", min: 0.02, max: 0.5, step: 0.02, def: 0.1 },
+          rock: { label: "", min: 0.02, max: 0.5, step: 0.02, def: 0.1, hide: true },
+          walk: { label: "", min: 0.02, max: 0.5, step: 0.02, def: 0.1, hide: true },
+          scatter: { label: "", min: 0.02, max: 0.5, step: 0.02, def: 0.1, hide: true },
+        },
+      },
+      {
+        key: "passes", label: "Passes", type: "slider", min: 1, max: 32, step: 1, def: 4, modeKey: "path",
+        modeCfg: {
+          random: { label: "", min: 1, max: 32, step: 1, def: 4, hide: true },
+          rock: { label: "Passes", min: 1, max: 32, step: 1, def: 4 },
+          walk: { label: "", min: 1, max: 32, step: 1, def: 4, hide: true },
+          scatter: { label: "", min: 1, max: 32, step: 1, def: 4, hide: true },
+        },
+      },
+      {
+        key: "step", label: "Step", type: "slider", min: 0.1, max: 4, step: 0.05, def: 0.5, unit: " s", modeKey: "path",
+        modeCfg: {
+          random: { label: "", min: 0.1, max: 4, step: 0.05, def: 0.5, hide: true },
+          rock: { label: "", min: 0.1, max: 4, step: 0.05, def: 0.5, hide: true },
+          walk: { label: "Step back", min: 0.1, max: 4, step: 0.05, def: 0.5 },
+          scatter: { label: "", min: 0.1, max: 4, step: 0.05, def: 0.5, hide: true },
+        },
+      },
+      {
+        key: "points", label: "Points", type: "slider", min: 2, max: 64, step: 1, def: 8, modeKey: "path",
+        modeCfg: {
+          random: { label: "", min: 2, max: 64, step: 1, def: 8, hide: true },
+          rock: { label: "", min: 2, max: 64, step: 1, def: 8, hide: true },
+          walk: { label: "", min: 2, max: 64, step: 1, def: 8, hide: true },
+          scatter: { label: "Turning points", min: 2, max: 64, step: 1, def: 8 },
+        },
+      },
     ],
-    run: (i, p, td) => zigzag(i, { start: n(p.start), end: n(p.end), outDur: n(p.outDur), minZig: n(p.minZig) }, td, td),
+    run: (i, p, td) => zigzag(i, {
+      start: n(p.start), end: n(p.end), outDur: n(p.outDur ?? 6), minZig: n(p.minZig ?? 0.1),
+      path: (p.path ?? "random") as ZigPath, passes: n(p.passes ?? 4), step: n(p.step ?? 0.5), points: n(p.points ?? 8),
+    }, td, td),
   },
   {
     id: "cdp.iterFreeze", title: "Iteration Freeze", group: "Cut & Shuffle",
