@@ -40,6 +40,16 @@ export function getCdpBinDir(): string {
   );
 }
 
+/**
+ * Native (arm64) CDP build, for programs whose Intel build is broken. `filter
+ * bank` overflows the heap in CDP's own source (filters0.c, fixed on branch
+ * fix/filter-bank-iparam-overflow of ~/CDP8): under Rosetta it spins forever,
+ * so it runs from the patched native build instead.
+ */
+export function getNativeCdpBinDir(): string {
+  return process.env["CDP_NATIVE_BIN_DIR"] || `${process.env["HOME"]}/CDP8/NewRelease`;
+}
+
 function findBinary(name: string, envVar: string): string {
   const override = process.env[envVar];
   if (override) return override;

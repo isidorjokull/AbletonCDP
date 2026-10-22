@@ -50,7 +50,7 @@ import {
 } from "./new-binaries.js";
 import { shudder } from "./shudder.js";
 import { cantor } from "./cantor.js";
-import { resonantDelay, phaser, sweepFilter, type SweepType } from "./filters.js";
+import { resonantDelay, phaser, sweepFilter, filterBank, type SweepType, type BankMode } from "./filters.js";
 import {
   spectralScatter, spectralNoise, spectralShuffle, spectralExaggerate, spectralStep,
   spectralArpeggio, spectralInvert, spectralWaver, spectralGlide,
@@ -1107,6 +1107,69 @@ export const TOOLS: ToolSpec[] = [
       { key: "delay", label: "Delay", type: "slider", min: 0.1, max: 30, step: 0.1, def: 5, unit: " ms", log: true },
     ],
     run: (i, p, td) => phaser(i, { depth: n(p.depth), delay: n(p.delay) }, td),
+  },
+  {
+    id: "cdp.filterBank", title: "Filter Bank", group: "Ambient & Space",
+    blurb: "A bank of tuned resonators — turns noise and texture into a chord.",
+    docs: "Runs the clip through many narrow resonant filters at once, so even noise rings out as pitch (rain becomes a drone). Harmonic tunes them to a series above Low; Subharmonic below High; Offset shifts the series to inharmonic bells; Count and Interval spread them evenly. Q sets how sharply they ring.",
+    params: [
+      {
+        key: "mode", label: "Tuning", type: "select", def: "harmonic",
+        options: [
+          { value: "harmonic", label: "Harmonic series above Low" },
+          { value: "alternate", label: "Odd harmonics above Low" },
+          { value: "subharmonic", label: "Subharmonics below High" },
+          { value: "offset", label: "Harmonics + offset — bell-like" },
+          { value: "count", label: "Even spread — number of filters" },
+          { value: "interval", label: "Even spread — interval in semitones" },
+        ],
+      },
+      { key: "q", label: "Q (ring)", type: "slider", min: 1, max: 1000, step: 1, def: 60, log: true },
+      { key: "loFrq", label: "Low", type: "slider", min: 20, max: 8000, step: 1, def: 110, unit: " Hz", log: true },
+      { key: "hiFrq", label: "High", type: "slider", min: 50, max: 14700, step: 1, def: 4000, unit: " Hz", log: true },
+      {
+        key: "offset", label: "Offset", type: "slider", min: 0, max: 1000, step: 1, def: 10, unit: " Hz", modeKey: "mode",
+        modeCfg: {
+          harmonic: { label: "", min: 0, max: 1000, step: 1, def: 10, hide: true },
+          alternate: { label: "", min: 0, max: 1000, step: 1, def: 10, hide: true },
+          subharmonic: { label: "", min: 0, max: 1000, step: 1, def: 10, hide: true },
+          offset: { label: "Offset", min: 0, max: 1000, step: 1, def: 10 },
+          count: { label: "", min: 0, max: 1000, step: 1, def: 10, hide: true },
+          interval: { label: "", min: 0, max: 1000, step: 1, def: 10, hide: true },
+        },
+      },
+      {
+        key: "count", label: "Filters", type: "slider", min: 2, max: 100, step: 1, def: 12, modeKey: "mode",
+        modeCfg: {
+          harmonic: { label: "", min: 2, max: 100, step: 1, def: 12, hide: true },
+          alternate: { label: "", min: 2, max: 100, step: 1, def: 12, hide: true },
+          subharmonic: { label: "", min: 2, max: 100, step: 1, def: 12, hide: true },
+          offset: { label: "", min: 2, max: 100, step: 1, def: 12, hide: true },
+          count: { label: "Filters", min: 2, max: 100, step: 1, def: 12 },
+          interval: { label: "", min: 2, max: 100, step: 1, def: 12, hide: true },
+        },
+      },
+      {
+        key: "interval", label: "Interval", type: "slider", min: 0.5, max: 12, step: 0.5, def: 3, unit: " st", modeKey: "mode",
+        modeCfg: {
+          harmonic: { label: "", min: 0.5, max: 12, step: 0.5, def: 3, hide: true },
+          alternate: { label: "", min: 0.5, max: 12, step: 0.5, def: 3, hide: true },
+          subharmonic: { label: "", min: 0.5, max: 12, step: 0.5, def: 3, hide: true },
+          offset: { label: "", min: 0.5, max: 12, step: 0.5, def: 3, hide: true },
+          count: { label: "", min: 0.5, max: 12, step: 0.5, def: 3, hide: true },
+          interval: { label: "Interval", min: 0.5, max: 12, step: 0.5, def: 3 },
+        },
+      },
+      { key: "gain", label: "Gain", type: "slider", min: 0.1, max: 20, step: 0.1, def: 1, log: true },
+      { key: "tail", label: "Ring-out", type: "slider", min: 0, max: 10, step: 0.25, def: 1, unit: " s" },
+      { key: "scatter", label: "Scatter", type: "slider", min: 0, max: 1, step: 0.05, def: 0 },
+      { key: "double", label: "Double filtering (sharper)", type: "check", def: false },
+    ],
+    run: (i, p, td) => filterBank(i, {
+      mode: String(p.mode) as BankMode, q: n(p.q), gain: n(p.gain), loFrq: n(p.loFrq), hiFrq: n(p.hiFrq),
+      offset: n(p.offset), count: n(p.count), interval: n(p.interval), tail: n(p.tail), scatter: n(p.scatter),
+      double: Boolean(p.double),
+    }, td),
   },
   {
     id: "cdp.sweepFilter", title: "Sweep Filter", group: "Ambient & Space",

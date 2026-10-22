@@ -6,8 +6,8 @@ import { getCdpBinDir, getFfmpegPath, getFfprobePath, pathExists } from "./confi
 /** A CDP process that runs longer than this is assumed hung and is killed (some, e.g. `filter bank`, hang at random). */
 const CDP_TIMEOUT_MS = 5 * 60 * 1000;
 
-export async function runCdp(binary: string, args: string[], opts: { cwd?: string } = {}): Promise<void> {
-  const binDir = getCdpBinDir();
+export async function runCdp(binary: string, args: string[], opts: { cwd?: string; binDir?: string } = {}): Promise<void> {
+  const binDir = opts.binDir ?? getCdpBinDir();
   const binPath = join(binDir, binary);
 
   if (!pathExists(binPath)) {

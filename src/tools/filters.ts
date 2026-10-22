@@ -1,4 +1,6 @@
+import { join } from "path";
 import { runCdp, buildOutputPath } from "../runner.js";
+import { getNativeCdpBinDir, pathExists } from "../config.js";
 
 // Time-domain `filter` and `newdelay` processes. All verified stereo-native.
 
@@ -82,5 +84,64 @@ export async function sweepFilter(
     String(clamp(params.rate, 0.001, 200)),
     "-t0.5",
   ]);
+  return outputPath;
+}
+
+export type BankMode = "harmonic" | "alternate" | "subharmonic" | "offset" | "count" | "interval";
+
+const BANK_MODE: Record<BankMode, string> = {
+  harmonic: "1", alternate: "2", subharmonic: "3", offset: "4", count: "5", interval: "6",
+};
+
+export interface FilterBankParams {
+  mode: BankMode;
+  q: number;        // tightness of each filter (0.001–<10000)
+  gain: number;     // overall gain (0.001–10000)
+  loFrq: number;    // lowest filter frequency (Hz)
+  hiFrq: number;    // highest filter frequency (Hz, ≤ srate/3)
+  offset: number;   // offset mode: Hz added to every harmonic
+  count: number;    // count mode: number of filters
+  interval: number; // interval mode: semitones between filters
+  tail: number;     // seconds of ringing after the clip
+  scatter: number;  // 0–1 random scatter of the filter frequencies
+  double: boolean;  // -d: filter twice, for sharper resonance
+}
+
+/**
+ * `filter bank 1-3 in out Q gain lof hif [-ttail] [-sscat] [-d]`, modes 4-6 with
+ * `param` after hif. Stereo-native. Runs from the patched NATIVE build — see
+ * getNativeCdpBinDir().
+ */
+export async function filterBank(
+  inputPath: string,
+  params: FilterBankParams,
+  outputDir?: string
+): Promise<string> {
+  const binDir = getNativeCdpBinDir();
+  if (!pathExists(join(binDir, "filter"))) {
+    throw new Error(
+      `Filter Bank needs the patched native CDP build at ${binDir}/filter (the Intel build hangs). ` +
+      "Build ~/CDP8 on branch fix/filter-bank-iparam-overflow, or set CDP_NATIVE_BIN_DIR."
+    );
+  }
+  const outputPath = buildOutputPath(inputPath, `bank${params.mode}`, outputDir);
+  // CDP's count_filters() never terminates for lof = 0 or an interval <= 0, so keep those away
+  const lo = clamp(Math.min(params.loFrq, params.hiFrq), 20, 14000);
+  const hi = clamp(Math.max(params.loFrq, params.hiFrq), lo + 1, 14700); // ≤ srate/3 at 44.1 kHz
+  const extra: Partial<Record<BankMode, string>> = {
+    offset: String(clamp(params.offset, 0, 5000)),
+    count: String(clamp(Math.round(params.count), 1, 200)),
+    interval: String(clamp(params.interval, 0.1, 48)),
+  };
+  const args = [
+    "bank", BANK_MODE[params.mode], inputPath, outputPath,
+    String(clamp(params.q, 0.001, 9999)), String(clamp(params.gain, 0.001, 10000)),
+    String(lo), String(hi),
+    ...(extra[params.mode] !== undefined ? [extra[params.mode]!] : []),
+    `-t${clamp(params.tail, 0, 30)}`,
+  ];
+  if (params.scatter > 0) args.push(`-s${clamp(params.scatter, 0, 1)}`);
+  if (params.double) args.push("-d");
+  await runCdp("filter", args, { binDir });
   return outputPath;
 }

@@ -113,7 +113,7 @@ Built and verified on mono + stereo, under the sandbox replica and in jsdom (98 
 
 Not built:
 
-- **A3 Resonant Filter Bank** — `filter bank` hangs at random on this machine (same command: instant once, never returns the next time).
+- **A3 Resonant Filter Bank** — ~~hangs at random~~ **built 2026-10-22 as Filter Bank (`cdp.filterBank`)**: the hang was a heap overflow in CDP's `filters0.c`, fixed in `~/CDP8` (branch `fix/filter-bank-iparam-overflow`); the tool runs the patched native build.
 - **C17 New Texture** — `newtex` hangs even when asked for its usage text.
 - Smaller extras: `hilite pluck`, `specfnu` modes 10/19, `tunevary`, `distortt repeat`, the DC-offset option, and the rest of section D.
 
