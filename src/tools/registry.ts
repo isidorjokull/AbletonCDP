@@ -55,7 +55,7 @@ import {
   spectralScatter, spectralNoise, spectralShuffle, spectralExaggerate, spectralStep,
   spectralArpeggio, spectralInvert, spectralWaver, spectralGlide,
   spectralTrace, spectralSuppress, spectralPluck, spectralAverage, spectralWeave, spectralHold,
-  type TraceBand,
+  freezeMoments, type TraceBand, type FreezeWhat,
   inharmonicStretch, formants, spectralRandomise, spectralTopBlur, selfSimilar, tuneToChord, spectralChord,
   type FormantMode,
   type ArpMode, type ArpWave, type GlideType,
@@ -1083,6 +1083,28 @@ export const TOOLS: ToolSpec[] = [
     docs: "The opposite of Spectral Trace: in every analysis window the N loudest partials are thrown away and everything else is kept. Taking out just one or two removes the fundamental and the strongest resonances, revealing the breath, buzz and noise that were masked underneath; larger counts hollow the sound out into a ghostly residue.",
     params: [{ key: "count", label: "Partials removed", type: "slider", min: 1, max: 100, step: 1, def: 2, log: true }],
     run: (i, p, td) => spectralSuppress(i, { count: n(p.count) }, td, td),
+  },
+  {
+    id: "cdp.specFreezeAt", title: "Freeze Moments", group: "Spectral",
+    blurb: "Stops the spectrum still at chosen moments, then lets it run on.",
+    docs: "At each freeze the spectrum of that instant is held: freeze Loudness and the pitches keep moving under a fixed tone colour; freeze Pitch and the chord sticks while the loudness keeps breathing; freeze Both for a true hold. First sets when the first freeze starts, Hold how long it lasts, Gap the free-running time between freezes.",
+    params: [
+      {
+        key: "what", label: "Freeze", type: "select", def: "both",
+        options: [
+          { value: "both", label: "Both — a true hold" },
+          { value: "amps", label: "Loudness — pitches keep moving" },
+          { value: "freqs", label: "Pitch — loudness keeps moving" },
+        ],
+      },
+      { key: "first", label: "First freeze at", type: "slider", min: 0, max: 30, step: 0.05, def: 0.5, unit: " s" },
+      { key: "hold", label: "Hold", type: "slider", min: 0.05, max: 10, step: 0.05, def: 1, unit: " s", log: true },
+      { key: "gap", label: "Gap", type: "slider", min: 0.05, max: 10, step: 0.05, def: 1, unit: " s", log: true },
+      { key: "repeat", label: "Repeat to the end", type: "check", def: true },
+    ],
+    run: (i, p, td) => freezeMoments(i, {
+      what: String(p.what) as FreezeWhat, first: n(p.first), hold: n(p.hold), gap: n(p.gap), repeat: Boolean(p.repeat),
+    }, td, td),
   },
   {
     id: "cdp.specPluck", title: "Spectral Pluck", group: "Spectral",

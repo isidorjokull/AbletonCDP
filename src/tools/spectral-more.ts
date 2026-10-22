@@ -240,6 +240,44 @@ export async function spectralHold(i: string, p: SpectralHoldParams, td: string,
   }
 }
 
+export type FreezeWhat = "amps" | "freqs" | "both";
+const FREEZE_MODE: Record<FreezeWhat, string> = { amps: "1", freqs: "2", both: "3" };
+
+export interface FreezeMomentsParams {
+  what: FreezeWhat; // what stops moving: loudness, pitch, or both
+  first: number;    // seconds before the first freeze
+  hold: number;     // seconds each freeze lasts
+  gap: number;      // seconds of normal sound between freezes
+  repeat: boolean;  // keep freezing until the end, or only once
+}
+
+/**
+ * `focus freeze` data lines: `a<t>` freezes on the window after t, the next
+ * plain time unfreezes. A first freeze past the end is pulled inside the clip.
+ */
+export function freezeLines(dur: number, p: Omit<FreezeMomentsParams, "what">): string[] {
+  const hold = Math.max(0.05, p.hold);
+  const gap = Math.max(0.05, p.gap);
+  let t = clamp(p.first, 0, Math.max(0, dur - 0.05));
+  const lines: string[] = [];
+  do {
+    lines.push(`a${t.toFixed(3)}`, Math.min(t + hold, dur).toFixed(3));
+    t += hold + gap;
+  } while (p.repeat && t < dur - 0.05 && lines.length < 256);
+  return lines;
+}
+
+/** `focus freeze 1|2|3 in out datafile` — holds the spectrum still at the chosen moments. */
+export async function freezeMoments(i: string, p: FreezeMomentsParams, td: string, od?: string) {
+  const dataPath = buildTempPath(td, i, "freeze", ".txt");
+  writeFileSync(dataPath, freezeLines(await getAudioDuration(i), p).join("\n") + "\n");
+  try {
+    return await spectralOp(i, "specfreezeat", td, od, "focus", ["freeze", FREEZE_MODE[p.what]], [dataPath]);
+  } finally {
+    if (existsSync(dataPath)) unlinkSync(dataPath);
+  }
+}
+
 export interface InharmonicStretchParams {
   below: boolean;   // false: stretch above the dividing frequency (mode 1) | true: below it (mode 2)
   divide: number;   // dividing frequency in Hz

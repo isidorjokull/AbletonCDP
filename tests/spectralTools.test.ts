@@ -49,7 +49,7 @@ beforeEach(() => { if (existsSync(log)) rmSync(log); });
 
 /** The latest spectral (non-pvoc) call's arguments, with the two .ana paths replaced by IN/OUT. */
 function specCall(): string {
-  const line = readFileSync(log, "utf8").split("\n").filter((l) => l && !l.startsWith("pvoc ")).at(-1)!;
+  const line = readFileSync(log, "utf8").split("\n").filter((l) => /^(blur|hilite|focus) /.test(l)).at(-1)!;
   return line.replace(/\S+\.ana/, "IN").replace(/\S+\.ana/, "OUT");
 }
 
@@ -90,4 +90,25 @@ test("Spectral Trace between swaps a reversed band", async () => {
 test("old Spectral Trace params without a band still run mode 1 / bltr", async () => {
   await run("cdp.specTrace", { partials: 8, blur: 4 });
   assert.equal(specCall(), "hilite bltr IN OUT 4 8");
+});
+
+test("freezeLines: freeze-after markers with unfreeze times, repeating to the end", async () => {
+  const { freezeLines } = await import("../src/tools/spectral-more.js");
+  assert.deepEqual(freezeLines(5, { first: 0.5, hold: 1, gap: 1, repeat: true }), ["a0.500", "1.500", "a2.500", "3.500", "a4.500", "5.000"]);
+  assert.deepEqual(freezeLines(5, { first: 0.5, hold: 1, gap: 1, repeat: false }), ["a0.500", "1.500"]);
+});
+
+test("freezeLines: a first freeze past the clip end still freezes once near the end", async () => {
+  const { freezeLines } = await import("../src/tools/spectral-more.js");
+  const lines = freezeLines(2, { first: 10, hold: 1, gap: 1, repeat: true });
+  assert.equal(lines.length, 2);
+  assert.ok(Number(lines[0]!.slice(1)) < 2);
+});
+
+test("Freeze Moments runs focus freeze <mode> with the generated file", async () => {
+  script("focus", `echo "FILE" >> "${log}"; cat "$5" >> "${log}"; cp "$3" "$4"`);
+  await run("cdp.specFreezeAt", { what: "freqs", first: 0.2, hold: 0.3, gap: 0.2, repeat: false });
+  assert.equal(specCall(), "focus freeze 2 IN OUT " + specCall().split(" ").at(-1));
+  assert.match(specCall(), /\.txt$/);
+  assert.match(readFileSync(log, "utf8"), /FILE\na0\.200\n0\.500\n/);
 });

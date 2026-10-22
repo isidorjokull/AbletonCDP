@@ -4,7 +4,7 @@ Guidance for Claude Code working in this repo. Facts here are **verified by runn
 
 ## What this is
 
-`cdp-for-live` — an Ableton **Extensions SDK** (1.0.0-beta.1) plugin (TypeScript) that exposes **CDP** (Composers Desktop Project, Release 8) audio tools as right-click context-menu actions on AudioClips in **Ableton Live 12 Beta** (developer mode). It shells out to local CDP binaries via `child_process.spawn`. 100 tools (across groups Time & Pitch, Spectral, Waveset & Distort, Cut & Shuffle, Envelope, Ambient & Space) + a combined "All Tools" Rack.
+`cdp-for-live` — an Ableton **Extensions SDK** (1.0.0-beta.1) plugin (TypeScript) that exposes **CDP** (Composers Desktop Project, Release 8) audio tools as right-click context-menu actions on AudioClips in **Ableton Live 12 Beta** (developer mode). It shells out to local CDP binaries via `child_process.spawn`. 101 tools (across groups Time & Pitch, Spectral, Waveset & Distort, Cut & Shuffle, Envelope, Ambient & Space) + a combined "All Tools" Rack.
 
 - **CDP binaries:** `~/cdpr8/_cdp/_cdprogs/` — **x86_64 (Intel) via Rosetta 2**, not arm64. Path resolved in `src/config.ts` (`CDP_BIN_DIR` env overrides).
 - **Extension Host:** path in `.env` as `EXTENSION_HOST_PATH`. **Do not `cat .env`** — the auto-mode classifier blocks it.
@@ -16,7 +16,7 @@ npm run build      # tsc --noEmit (typecheck) + tsx build.ts (esbuild → dist/e
 npm test           # tsx --test tests/*.test.ts (endpoint, listener, LOM path, dispatcher, rack state, runner)
 npx extensions-cli run --verbose   # load into Live; --verbose also shows host handshake lines
 ```
-Success looks like `activated: 100 tools + Rack + Repeat Last registered` in the host log.
+Success looks like `activated: 101 tools + Rack + Repeat Last registered` in the host log.
 **Do not trust dev mode for interactive testing** — under beta.1 the CLI kills the host ~10s after launch (gotcha 12). Anything needing a dialog must be tested from a packaged install. `.html` is bundled as text via esbuild loader (though UI is now inline strings, not .html files).
 
 ## Architecture
@@ -87,7 +87,7 @@ For CDP tools themselves, no framework. Use tsx harnesses in the scratchpad that
 
 **Build/run loop.** `npm run build` (tsc typecheck + esbuild). To load changes in Live: `pkill -f "ExtensionHost"` then `npx extensions-cli run` **in the background**, and poll its `.output` file for `activated: N tools + Rack registered`. The `pkill` kills your previous background run, which fires a benign "failed (exit 144)" task notification — ignore it. If `N` is wrong or the log shows an error, the extension didn't load; fix and repeat. `sleep 4` before grepping the log — activation isn't instant.
 
-**Verifying the sandbox without Live.** The host's restriction is just a Node process flag, so it can be replicated exactly: bundle a harness with esbuild, then `node --permission --allow-fs-read=<temp> --allow-fs-write=<temp> --allow-fs-read=<harness.mjs> --allow-child-process harness.mjs`. Keep the audio fixtures OUTSIDE the granted temp dir — that is what makes it a real test, since a clip's source sample always lives outside. Run all 100 tools at their default params this way after touching anything that does file I/O.
+**Verifying the sandbox without Live.** The host's restriction is just a Node process flag, so it can be replicated exactly: bundle a harness with esbuild, then `node --permission --allow-fs-read=<temp> --allow-fs-write=<temp> --allow-fs-read=<harness.mjs> --allow-child-process harness.mjs`. Keep the audio fixtures OUTSIDE the granted temp dir — that is what makes it a real test, since a clip's source sample always lives outside. Run all 101 tools at their default params this way after touching anything that does file I/O.
 
 **tsx test harnesses.** Import the real `src/tools/*.ts` directly from a `.mts` in the scratchpad and call the registry `run` wrappers (or `toolById(id).run(src, params, SP, {tempo})`). tsx resolves the `.js` import specifiers fine; `config.getCdpBinDir()` auto-detects the binaries. Assert channel counts (`ffprobe … stream=channels`) and durations — this catches the two most common regressions (stereo wrapping broken, or wrong CDP arg order producing garbage length). Reverb is the one tool where mono-in → 2ch-out is *correct*.
 
