@@ -54,7 +54,8 @@ import { resonantDelay, phaser, sweepFilter, type SweepType } from "./filters.js
 import {
   spectralScatter, spectralNoise, spectralShuffle, spectralExaggerate, spectralStep,
   spectralArpeggio, spectralInvert, spectralWaver, spectralGlide,
-  spectralTrace, spectralAverage, spectralWeave, spectralHold,
+  spectralTrace, spectralSuppress, spectralPluck, spectralAverage, spectralWeave, spectralHold,
+  type TraceBand,
   inharmonicStretch, formants, spectralRandomise, spectralTopBlur, selfSimilar, tuneToChord, spectralChord,
   type FormantMode,
   type ArpMode, type ArpWave, type GlideType,
@@ -979,9 +980,61 @@ export const TOOLS: ToolSpec[] = [
     docs: "In every analysis window, throws away everything except the N loudest partials. With a handful kept, the sound becomes a web of pure, weaving whistles that follow its strongest resonances; with one or two it reduces to a singing sine melody. Blur averages the spectrum over time first, which steadies the traced partials into longer, smoother lines.",
     params: [
       { key: "partials", label: "Partials kept", type: "slider", min: 1, max: 100, step: 1, def: 8, log: true },
-      { key: "blur", label: "Blur (windows)", type: "slider", min: 1, max: 100, step: 1, def: 1, log: true },
+      {
+        key: "band", label: "Look for partials", type: "select", def: "all",
+        options: [
+          { value: "all", label: "Whole spectrum" },
+          { value: "above", label: "Above a frequency" },
+          { value: "below", label: "Below a frequency" },
+          { value: "between", label: "Between two frequencies" },
+        ],
+      },
+      {
+        key: "blur", label: "Blur (windows)", type: "slider", min: 1, max: 100, step: 1, def: 1, log: true, modeKey: "band",
+        modeCfg: {
+          all: { label: "Blur (windows)", min: 1, max: 100, step: 1, def: 1 },
+          above: { label: "", min: 1, max: 100, step: 1, def: 1, hide: true },
+          below: { label: "", min: 1, max: 100, step: 1, def: 1, hide: true },
+          between: { label: "", min: 1, max: 100, step: 1, def: 1, hide: true },
+        },
+      },
+      {
+        key: "loFrq", label: "Low frequency", type: "slider", min: 20, max: 16000, step: 1, def: 300, unit: " Hz", log: true, modeKey: "band",
+        modeCfg: {
+          all: { label: "", min: 20, max: 16000, step: 1, def: 300, hide: true },
+          above: { label: "Above", min: 20, max: 16000, step: 1, def: 300 },
+          below: { label: "", min: 20, max: 16000, step: 1, def: 300, hide: true },
+          between: { label: "From", min: 20, max: 16000, step: 1, def: 300 },
+        },
+      },
+      {
+        key: "hiFrq", label: "High frequency", type: "slider", min: 20, max: 16000, step: 1, def: 2000, unit: " Hz", log: true, modeKey: "band",
+        modeCfg: {
+          all: { label: "", min: 20, max: 16000, step: 1, def: 2000, hide: true },
+          above: { label: "", min: 20, max: 16000, step: 1, def: 2000, hide: true },
+          below: { label: "Below", min: 20, max: 16000, step: 1, def: 2000 },
+          between: { label: "To", min: 20, max: 16000, step: 1, def: 2000 },
+        },
+      },
     ],
-    run: (i, p, td) => spectralTrace(i, { partials: n(p.partials), blur: n(p.blur) }, td, td),
+    run: (i, p, td) => spectralTrace(i, {
+      partials: n(p.partials), blur: n(p.blur ?? 1),
+      band: (p.band ?? "all") as TraceBand, loFrq: n(p.loFrq ?? 300), hiFrq: n(p.hiFrq ?? 2000),
+    }, td, td),
+  },
+  {
+    id: "cdp.specSuppress", title: "Spectral Suppress", group: "Spectral",
+    blurb: "Removes the loudest partials — the hidden timbre underneath.",
+    docs: "The opposite of Spectral Trace: in every analysis window the N loudest partials are thrown away and everything else is kept. Taking out just one or two removes the fundamental and the strongest resonances, revealing the breath, buzz and noise that were masked underneath; larger counts hollow the sound out into a ghostly residue.",
+    params: [{ key: "count", label: "Partials removed", type: "slider", min: 1, max: 100, step: 1, def: 2, log: true }],
+    run: (i, p, td) => spectralSuppress(i, { count: n(p.count) }, td, td),
+  },
+  {
+    id: "cdp.specPluck", title: "Spectral Pluck", group: "Spectral",
+    blurb: "Accents each partial as it enters — a plucked edge on spectral change.",
+    docs: "Boosts every partial at the moment it first appears in the spectrum, so each change in the sound gets a bright, plucked attack. Steady tones barely change; material whose spectrum moves (speech, Spectral Trace or Spectral Arpeggio results) turns into chains of glinting entries. Gain sets how hard each entry is struck.",
+    params: [{ key: "gain", label: "Gain", type: "slider", min: 1, max: 1000, step: 1, def: 10, log: true }],
+    run: (i, p, td) => spectralPluck(i, { gain: n(p.gain) }, td, td),
   },
   {
     id: "cdp.specAverage", title: "Spectral Roughen", group: "Spectral",

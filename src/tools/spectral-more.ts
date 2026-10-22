@@ -146,18 +146,45 @@ export function spectralGlide(i: string, p: SpectralGlideParams, td: string, od?
   return spectralOp(i, `specglide${p.type}`, td, od, "strange", ["glis", p.type === "self" ? "3" : "1"], ["-p12", String(rate)]);
 }
 
+export type TraceBand = "all" | "above" | "below" | "between";
+
 export interface SpectralTraceParams {
   partials: number; // loudest partials kept in each window
-  blur: number;     // windows averaged first (1 = no blur)
+  blur: number;     // windows averaged first (1 = no blur; whole spectrum only)
+  band?: TraceBand; // where the partials are looked for (default: the whole spectrum)
+  loFrq?: number;   // Hz — "above" and "between"
+  hiFrq?: number;   // Hz — "below" and "between"
 }
 
-/** `hilite trace 1 in out N`, or `hilite bltr in out blurring tracing` when blur > 1. */
+/**
+ * `hilite trace 1 in out N`, `hilite bltr in out blurring tracing` (blur > 1),
+ * or a band: `trace 2 … N lofrq` (above), `3 … N hifrq` (below), `4 … N lofrq hifrq`.
+ */
 export function spectralTrace(i: string, p: SpectralTraceParams, td: string, od?: string) {
   const n = String(clamp(Math.round(p.partials), 1, 500));
   const blur = Math.round(p.blur);
+  const band = p.band ?? "all";
+  const f = (v: number | undefined, def: number) => String(Math.round(clamp(v ?? def, 10, 20000)));
+  if (band === "above") return spectralOp(i, "spectrace", td, od, "hilite", ["trace", "2"], [n, f(p.loFrq, 300)]);
+  if (band === "below") return spectralOp(i, "spectrace", td, od, "hilite", ["trace", "3"], [n, f(p.hiFrq, 2000)]);
+  if (band === "between") {
+    const lo = Math.min(p.loFrq ?? 300, p.hiFrq ?? 2000);
+    const hi = Math.max(p.loFrq ?? 300, p.hiFrq ?? 2000);
+    return spectralOp(i, "spectrace", td, od, "hilite", ["trace", "4"], [n, f(lo, 300), f(hi, 2000)]);
+  }
   return blur > 1
     ? spectralOp(i, "spectrace", td, od, "hilite", ["bltr"], [String(blur), n])
     : spectralOp(i, "spectrace", td, od, "hilite", ["trace", "1"], [n]);
+}
+
+/** `blur suppress in out N` — removes the N loudest partials of every window (the opposite of trace). */
+export function spectralSuppress(i: string, p: { count: number }, td: string, od?: string) {
+  return spectralOp(i, "specsuppress", td, od, "blur", ["suppress"], [String(clamp(Math.round(p.count), 1, 500))]);
+}
+
+/** `hilite pluck in out gain` — boosts partials at the moment they enter the spectrum. */
+export function spectralPluck(i: string, p: { gain: number }, td: string, od?: string) {
+  return spectralOp(i, "specpluck", td, od, "hilite", ["pluck"], [String(clamp(p.gain, 1, 1000))]);
 }
 
 export interface SpectralAverageParams {
