@@ -878,12 +878,13 @@ export const TOOLS: ToolSpec[] = [
   {
     id: "cdp.delay", title: "Delay", group: "Ambient & Space",
     blurb: "Feedback delay, or a stadium P.A. echo.",
-    docs: "Delay is a classic feedback delay line: Time sets the repeat spacing, Mix the delayed level, Feedback how long repeats keep going — at very short times feedback turns into a pitched, metallic resonance. Tail is extra time at the end for the repeats to die away. Stadium scatters many echoes across a wide stereo field like a P.A. in an arena; Size spreads them out, Echoes sets how many there are and Roll-off how quickly they fade.",
+    docs: "Delay is a classic feedback delay line: Time sets the repeat spacing, Mix the delayed level, Feedback how long repeats keep going — at very short times feedback turns into a pitched, metallic resonance. Tail is extra time at the end for the repeats to die away. Modulated sweeps the delay time with an LFO (or a random wander) for chorus, flange and warble. Stadium scatters many echoes across a wide stereo field like a P.A. in an arena; Size spreads them out, Echoes sets how many there are and Roll-off how quickly they fade.",
     params: [
       {
         key: "mode", label: "Mode", type: "select", def: "delay",
         options: [
           { value: "delay", label: "Delay — feedback delay line" },
+          { value: "modulated", label: "Modulated — sweeping delay time" },
           { value: "stadium", label: "Stadium — arena P.A. echoes" },
         ],
       },
@@ -892,6 +893,7 @@ export const TOOLS: ToolSpec[] = [
         modeCfg: {
           // ranges kept disjoint (6+ vs ≤5) so switching mode resets the value to that mode's default
           delay: { label: "Time (ms)", min: 6, max: 2000, step: 1, def: 250 },
+          modulated: { label: "Time (ms)", min: 6, max: 2000, step: 1, def: 200 },
           stadium: { label: "Size", min: 0.2, max: 5, step: 0.1, def: 1 },
         },
       },
@@ -899,6 +901,7 @@ export const TOOLS: ToolSpec[] = [
         key: "mix", label: "Mix", type: "slider", min: 0, max: 1, step: 0.05, def: 0.5, modeKey: "mode",
         modeCfg: {
           delay: { label: "Mix", min: 0, max: 1, step: 0.05, def: 0.5 },
+          modulated: { label: "Mix", min: 0, max: 1, step: 0.05, def: 0.5 },
           stadium: { label: "Roll-off", min: 0.05, max: 1, step: 0.05, def: 1 },
         },
       },
@@ -906,6 +909,7 @@ export const TOOLS: ToolSpec[] = [
         key: "feedback", label: "Feedback", type: "slider", min: 0, max: 0.95, step: 0.05, def: 0.4, modeKey: "mode",
         modeCfg: {
           delay: { label: "Feedback", min: 0, max: 0.95, step: 0.05, def: 0.4 },
+          modulated: { label: "Feedback", min: 0, max: 0.95, step: 0.05, def: 0.6 },
           stadium: { label: "Echoes", min: 2, max: 100, step: 1, def: 20 },
         },
       },
@@ -913,9 +917,27 @@ export const TOOLS: ToolSpec[] = [
         key: "tail", label: "Tail (s)", type: "slider", min: 0, max: 10, step: 0.25, def: 2, modeKey: "mode",
         modeCfg: { stadium: { label: "Tail (s)", min: 0, max: 10, step: 0.25, def: 2, hide: true } },
       },
+      {
+        key: "lfoDepth", label: "Sweep depth", type: "slider", min: 0, max: 1, step: 0.05, def: 0.5, modeKey: "mode",
+        modeCfg: {
+          delay: { label: "", min: 0, max: 1, step: 0.05, def: 0.5, hide: true },
+          modulated: { label: "Sweep depth", min: 0, max: 1, step: 0.05, def: 0.5 },
+          stadium: { label: "", min: 0, max: 1, step: 0.05, def: 0.5, hide: true },
+        },
+      },
+      {
+        key: "lfoRate", label: "Sweep rate", type: "slider", min: 0.05, max: 50, step: 0.05, def: 2, unit: " Hz", log: true, modeKey: "mode",
+        modeCfg: {
+          delay: { label: "", min: 0.05, max: 50, step: 0.05, def: 2, hide: true },
+          modulated: { label: "Sweep rate", min: 0.05, max: 50, step: 0.05, def: 2 },
+          stadium: { label: "", min: 0.05, max: 50, step: 0.05, def: 2, hide: true },
+        },
+      },
+      { key: "lfoRandom", label: "Modulated: wander randomly", type: "check", def: false },
     ],
     run: (i, p, td) => delay(i, {
       mode: String(p.mode) as DelayMode, time: n(p.time), mix: n(p.mix), feedback: n(p.feedback), tail: n(p.tail),
+      lfoDepth: n(p.lfoDepth ?? 0.5), lfoRate: n(p.lfoRate ?? 2), lfoRandom: Boolean(p.lfoRandom),
     }, td),
   },
   {

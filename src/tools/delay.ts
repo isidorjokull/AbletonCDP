@@ -1,6 +1,6 @@
 import { runCdp, buildOutputPath } from "../runner.js";
 
-export type DelayMode = "delay" | "stadium";
+export type DelayMode = "delay" | "modulated" | "stadium";
 
 export interface DelayParams {
   mode: DelayMode;
@@ -8,6 +8,9 @@ export interface DelayParams {
   mix: number;      // delay: amount of delayed signal (0 = dry) | stadium: roll-off across the stadium
   feedback: number; // delay: feedback (0–<1) | stadium: number of echoes
   tail: number;     // delay: seconds allowed for the delays to decay (unused by stadium)
+  lfoDepth?: number;   // modulated: depth of the delay-time sweep (0–1)
+  lfoRate?: number;    // modulated: sweeps per second
+  lfoRandom?: boolean; // modulated: wander randomly instead of a regular sweep (CDP: negative rate)
 }
 
 /**
@@ -29,6 +32,19 @@ export async function delay(
       `-s${params.time}`,
       `-e${Math.max(1, Math.round(params.feedback))}`,
       "-n",
+    ]);
+  } else if (params.mode === "modulated") {
+    // modify revecho 2 infl outfl delay mix feedback lfomod lfofreq lfophase lfodelay tail — stereo-native
+    const rate = Math.max(0.01, Math.min(50, params.lfoRate ?? 2));
+    await runCdp("modify", [
+      "revecho", "2", inputPath, outputPath,
+      String(params.time),
+      String(params.mix),
+      String(Math.max(0, Math.min(0.99, params.feedback))),
+      String(Math.max(0, Math.min(1, params.lfoDepth ?? 0.5))),
+      String(params.lfoRandom ? -rate : rate),
+      "0", "0",
+      String(Math.max(0, params.tail)),
     ]);
   } else {
     // modify revecho 1 infl outfl delay mix feedback tail
