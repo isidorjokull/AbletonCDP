@@ -899,13 +899,19 @@ export const TOOLS: ToolSpec[] = [
   {
     id: "cdp.specArp", title: "Spectral Arpeggio", group: "Spectral",
     blurb: "Sweeps a band up and down through the sound's partials.",
-    docs: "Moves a narrow band through the spectrum and picks out the partials it passes, arpeggiating the overtones already inside the sound. Band only plays nothing but the swept band (a filtered, flute-like trace); Boost leaves the sound intact and rings the partials out over it. Shape sets how the band travels, Rate how fast, Top how high it climbs. High Emphasis on an already loud clip can clip — back it off if it crunches.",
+    docs: "Moves a narrow band through the spectrum and picks out the partials it passes. Boost rings them over the intact sound; Band only keeps just the band; Band and below/above keep one side too. The Grow modes start from one edge, then boost or open into the full sound (Grow from below can't use Ramp down, from above can't use Ramp up). Shape, Rate and Top set the sweep.",
     params: [
       {
         key: "mode", label: "Mode", type: "select", def: "boost",
         options: [
           { value: "boost", label: "Boost — ring partials over the sound" },
           { value: "only", label: "Band only — just the swept band" },
+          { value: "below", label: "Band and below" },
+          { value: "above", label: "Band and above" },
+          { value: "belowBoost", label: "Grow from below, then boost" },
+          { value: "aboveBoost", label: "Grow from above, then boost" },
+          { value: "onceBelow", label: "Grow from below, then open up" },
+          { value: "onceAbove", label: "Grow from above, then open up" },
         ],
       },
       {

@@ -31,8 +31,8 @@ before(() => {
   script("pvoc", `if [ "$1" = anal ]; then cp "$3" "$4"; else cp "$2" "$3"; fi`);
   // blur suppress in out N
   script("blur", `cp "$2" "$3"`);
-  // hilite trace <mode> in out … | hilite pluck|bltr in out …
-  script("hilite", `if [ "$1" = trace ]; then cp "$3" "$4"; else cp "$2" "$3"; fi`);
+  // hilite trace|arpeg <mode> in out … | hilite pluck|bltr in out …
+  script("hilite", `case "$1" in trace|arpeg) cp "$3" "$4";; *) cp "$2" "$3";; esac`);
   inp = join(work, "mono.wav");
   execFileSync(getFfmpegPath(), ["-v", "error", "-y", "-f", "lavfi", "-i", "sine=frequency=220:duration=1",
     "-ac", "1", "-ar", "44100", "-c:a", "pcm_s16le", inp]);
@@ -111,4 +111,25 @@ test("Freeze Moments runs focus freeze <mode> with the generated file", async ()
   assert.equal(specCall(), "focus freeze 2 IN OUT " + specCall().split(" ").at(-1));
   assert.match(specCall(), /\.txt$/);
   assert.match(readFileSync(log, "utf8"), /FILE\na0\.200\n0\.500\n/);
+});
+
+test("Spectral Arpeggio's below/above/once modes map to hilite arpeg 3-8", async () => {
+  const base = { wave: "sine", rate: 2, top: 4000, boost: 8 };
+  const want: Record<string, string> = { belowBoost: "3", below: "5", above: "6", onceBelow: "7" };
+  for (const [mode, num] of Object.entries(want)) {
+    await run("cdp.specArp", { ...base, mode });
+    assert.equal(specCall(), `hilite arpeg ${num} IN OUT 2 2 -h4000 -a8`, mode);
+  }
+});
+
+test("above-boost and once-above with sine or saw start their sweep past half way", async () => {
+  await run("cdp.specArp", { mode: "aboveBoost", wave: "sine", rate: 2, top: 4000, boost: 8 });
+  assert.equal(specCall(), "hilite arpeg 4 IN OUT 2 2 -h4000 -a8 -p0.75");
+  await run("cdp.specArp", { mode: "onceAbove", wave: "down", rate: 2, top: 4000, boost: 8 });
+  assert.equal(specCall(), "hilite arpeg 8 IN OUT 1 2 -h4000 -a8");
+});
+
+test("a wave CDP forbids for the mode is refused with a clear message", async () => {
+  await assert.rejects(run("cdp.specArp", { mode: "belowBoost", wave: "down", rate: 2, top: 4000, boost: 8 }), /ramp down/i);
+  await assert.rejects(run("cdp.specArp", { mode: "onceAbove", wave: "up", rate: 2, top: 4000, boost: 8 }), /ramp up/i);
 });

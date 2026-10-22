@@ -82,12 +82,16 @@ export function spectralStep(i: string, p: SpectralStepParams, td: string, od?: 
   return spectralOp(i, "specstep", td, od, "focus", ["step"], [String(Math.max(0.02, p.step))]);
 }
 
-export type ArpMode = "only" | "boost";
+export type ArpMode = "only" | "boost" | "belowBoost" | "aboveBoost" | "below" | "above" | "onceBelow" | "onceAbove";
 export type ArpWave = "sine" | "saw" | "down" | "up";
 
-// hilite arpeg mode / wave numbers (verified against CDP 7.1 binary)
-const ARP_MODE: Record<ArpMode, string> = { only: "1", boost: "2" };
+// hilite arpeg mode / wave numbers (verified against CDP 7.1 binary; modes 3-8 on CDP 8, 2026-10-22)
+const ARP_MODE: Record<ArpMode, string> = {
+  only: "1", boost: "2", belowBoost: "3", aboveBoost: "4", below: "5", above: "6", onceBelow: "7", onceAbove: "8",
+};
 const ARP_WAVE: Record<ArpWave, string> = { down: "1", sine: "2", saw: "3", up: "4" };
+// CDP rejects these with "INCORRECT USE": the band would start at the edge it must grow from.
+const ARP_FORBIDDEN: Partial<Record<ArpMode, ArpWave>> = { belowBoost: "down", onceBelow: "down", aboveBoost: "up", onceAbove: "up" };
 
 export interface SpectralArpeggioParams {
   mode: ArpMode;
@@ -98,13 +102,14 @@ export interface SpectralArpeggioParams {
 }
 
 /** `hilite arpeg mode in out wave rate -hTOP -aAMP` — sweeps a band through the partials. */
-export function spectralArpeggio(i: string, p: SpectralArpeggioParams, td: string, od?: string) {
-  return spectralOp(i, `specarp${p.mode}`, td, od, "hilite", ["arpeg", ARP_MODE[p.mode]], [
-    ARP_WAVE[p.wave],
-    String(Math.max(0.01, p.rate)),
-    `-h${Math.max(100, p.top)}`,
-    `-a${Math.max(1, p.boost)}`,
-  ]);
+export async function spectralArpeggio(i: string, p: SpectralArpeggioParams, td: string, od?: string) {
+  if (ARP_FORBIDDEN[p.mode] === p.wave) {
+    throw new Error(`This mode can't use the ${p.wave === "down" ? "Ramp down" : "Ramp up"} shape — pick Sine, Triangle saw or the other ramp.`);
+  }
+  const tail = [ARP_WAVE[p.wave], String(Math.max(0.01, p.rate)), `-h${Math.max(100, p.top)}`, `-a${Math.max(1, p.boost)}`];
+  // modes 4 and 8 grow the band down from the top: a sine/saw sweep must start past half way
+  if ((p.mode === "aboveBoost" || p.mode === "onceAbove") && (p.wave === "sine" || p.wave === "saw")) tail.push("-p0.75");
+  return spectralOp(i, `specarp${p.mode}`, td, od, "hilite", ["arpeg", ARP_MODE[p.mode]], tail);
 }
 
 export interface SpectralInvertParams {
