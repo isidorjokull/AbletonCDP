@@ -188,3 +188,27 @@ test("the dialog embeds the clip it was opened on", () => {
   const html = renderToolDialog(toolById("cdp.wsEnvelope")!, null, { seconds: 4, tempo: 120, peaks: null });
   assert.ok(html.includes('var CLIP={"seconds":4'));
 });
+
+test("a click on a point with 2 px of jitter still deletes it", () => {
+  const d = open();
+  d.setTarget("trough");
+  d.chip("rampUp").click();
+  d.ptr(d.$("rect.cv-bg"), "pointerdown", 180, 20);
+  d.ptr(d.doc, "pointerup", 180, 20);
+  assert.equal(d.$$("circle.cv-pt").length, 3);
+  d.ptr(d.$$("circle.cv-pt")[1], "pointerdown", 180, 20);
+  d.ptr(d.doc, "pointermove", 182, 21);
+  d.ptr(d.doc, "pointerup", 182, 21);
+  assert.equal(d.$$("circle.cv-pt").length, 2);
+});
+
+test("a drag captures the pointer so releasing outside the dialog still ends it", () => {
+  const d = open();
+  d.setTarget("trough");
+  d.chip("rampUp").click();
+  const captured: unknown[] = [];
+  d.w.SVGElement.prototype.setPointerCapture = (id: unknown) => { captured.push(id); };
+  d.$("rect.cv-bg").dispatchEvent(new d.w.PointerEvent("pointerdown",
+    { bubbles: true, clientX: 180, clientY: 20, pointerId: 7 }));
+  assert.deepEqual(captured, [7]);
+});

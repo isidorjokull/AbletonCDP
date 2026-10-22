@@ -223,6 +223,8 @@ function buildCurves(row,p,state,init){
   svg.addEventListener('pointerdown',function(e){
     var pos=at(e);if(!pos)return;
     if(e.preventDefault)e.preventDefault();
+    // keep receiving moves and the release even if the pointer leaves the dialog
+    if(e.pointerId!==undefined&&svg.setPointerCapture){try{svg.setPointerCapture(e.pointerId)}catch(_){}}
     if(!disp.length){var c0=cvToDisp(state[cur.param],cvRange(cur));disp=[{t:0,v:c0,b:0},{t:1,v:c0,b:0}]}
     var tgt=e.target,idx=tgt&&tgt.getAttribute&&tgt.getAttribute('class')==='cv-pt'?Number(tgt.getAttribute('data-i')):-1;
     var drag;
@@ -241,8 +243,9 @@ function buildCurves(row,p,state,init){
       move:function(ev){
         var q=at(ev);if(!q)return;
         if(drag.kind==='bend'){disp[drag.i].b=cvClamp(drag.b0-(q.y-drag.y0)*2,-1,1);drag.moved=true;drawEditor();return}
-        var k=ev.shiftKey?0.2:1,pt=disp[drag.i],last=disp.length-1;
-        if(Math.abs(q.t-drag.x0)+Math.abs(q.y-drag.y0)>0.003)drag.moved=true;
+        var k=ev.shiftKey?0.2:1,pt=disp[drag.i],last=disp.length-1,r=svg.getBoundingClientRect();
+        // a click with a few pixels of hand jitter is still a click (and deletes the point)
+        if(Math.abs(q.t-drag.x0)*r.width+Math.abs(q.y-drag.y0)*r.height>4)drag.moved=true;
         pt.v=cvClamp(drag.v0+(q.y-drag.y0)*k,0,1);
         if(drag.i===0)pt.t=0;else if(drag.i===last)pt.t=1;
         else pt.t=cvClamp(drag.t0+(q.t-drag.x0)*k,disp[drag.i-1].t,disp[drag.i+1].t);
