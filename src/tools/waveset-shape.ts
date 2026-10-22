@@ -1,4 +1,6 @@
-import { runCdp, buildOutputPath, runWithStereoSupport } from "../runner.js";
+import { existsSync, unlinkSync } from "fs";
+import { runCdp, buildOutputPath, buildTempPath, runWithStereoSupport, getAudioDuration } from "../runner.js";
+import { ENV_RANGES, parseCurve, curveToBreakpoints, writeBreakpointFile, type CurveRange } from "./envelope-curve.js";
 
 // More `distort` wavecycle operations. Like every `distort` mode they are
 // mono-only, so each goes through runWithStereoSupport.
@@ -104,15 +106,43 @@ export async function wavesetPitch(
   return outputPath;
 }
 
-export type WsEnvShape = "rising" | "falling" | "troughed";
+export type WsEnvShape = "rising" | "falling" | "troughed" | "user";
 
-const ENVEL_MODE: Record<WsEnvShape, string> = { rising: "1", falling: "2", troughed: "3" };
+const ENVEL_MODE: Record<WsEnvShape, string> = { rising: "1", falling: "2", troughed: "3", user: "4" };
+
+/** Mode 4's envelope when none is drawn: a pluck (fast rise, curved decay). */
+export const DEFAULT_SHAPE_CURVE = "0 0 0.04 1 1 0:0.6";
 
 export interface WavesetEnvelopeParams {
   shape: WsEnvShape;
   cycleCnt: number;  // wavecycles under each envelope
   trough: number;    // envelope floor (0–1)
   exponent: number;  // slope curve; 1 = linear
+  /** Curves over the clip (`t v` pairs, see envelope-curve.ts); "" or missing = use the number. */
+  cycleCntCurve?: string;
+  troughCurve?: string;
+  exponentCurve?: string;
+  /** Mode 4: the envelope drawn over each group of wavecycles. */
+  shapeCurve?: string;
+}
+
+/**
+ * `distort envel` argument order per mode (values are numbers or breakpoint paths):
+ *   1-2: envel N in out cyclecnt [-ttroughing] [-eexponent]
+ *   3:   envel 3 in out cyclecnt troughing [-eexponent]
+ *   4:   envel 4 in out envfile cyclecnt          (no -t / -e)
+ */
+export function envelArgs(
+  shape: WsEnvShape,
+  mono: string,
+  out: string,
+  v: { cyc: string; trough: string; exp: string | null; envfile: string | null }
+): string[] {
+  if (shape === "user") return ["envel", "4", mono, out, v.envfile ?? "", v.cyc];
+  const args = ["envel", ENVEL_MODE[shape], mono, out, v.cyc];
+  args.push(shape === "troughed" ? v.trough : `-t${v.trough}`);
+  if (v.exp !== null) args.push(`-e${v.exp}`);
+  return args;
 }
 
 export async function wavesetEnvelope(
@@ -122,14 +152,36 @@ export async function wavesetEnvelope(
   outputDir?: string
 ): Promise<string> {
   const outputPath = buildOutputPath(inputPath, `wsenv${params.shape}`, outputDir);
-  const trough = Math.max(0, Math.min(1, params.trough));
-  await runWithStereoSupport(inputPath, outputPath, tempDir, async (mono, out) => {
-    // distort envel 1-2 infile outfile cyclecnt [-ttroughing] [-eexponent]
-    // distort envel 3   infile outfile cyclecnt troughing     [-eexponent]
-    const args = ["envel", ENVEL_MODE[params.shape], mono, out, String(int(params.cycleCnt, 1, 1000))];
-    args.push(params.shape === "troughed" ? String(trough) : `-t${trough}`);
-    if (params.exponent !== 1) args.push(`-e${params.exponent}`); // omitted = linear
-    await runCdp("distort", args);
-  });
+  const written: string[] = [];
+  const duration = await getAudioDuration(inputPath);
+
+  // A drawn curve becomes a breakpoint file passed where the number would go.
+  const curveFile = (curve: string | undefined, range: CurveRange, suffix: string, ext = ".brk", scaleTime = true) => {
+    const pairs = curve ? curveToBreakpoints(parseCurve(curve), duration, range, scaleTime) : null;
+    if (!pairs) return null;
+    const path = buildTempPath(tempDir, inputPath, suffix, ext);
+    writeBreakpointFile(pairs, path);
+    written.push(path);
+    return path;
+  };
+
+  try {
+    const cyc = curveFile(params.cycleCntCurve, ENV_RANGES.cycleCnt, "wsenvcyc")
+      ?? String(int(params.cycleCnt, 1, 1000));
+    const trough = curveFile(params.troughCurve, ENV_RANGES.trough, "wsenvtrough")
+      ?? String(Math.max(0, Math.min(1, params.trough)));
+    const expCurve = curveFile(params.exponentCurve, ENV_RANGES.exponent, "wsenvexp");
+    const expFixed = Math.max(0.02, Math.min(50, params.exponent));
+    const exp = expCurve ?? (expFixed === 1 ? null : String(expFixed)); // omitted = linear
+    const envfile = params.shape === "user"
+      ? curveFile(params.shapeCurve || DEFAULT_SHAPE_CURVE, ENV_RANGES.shape, "wsenvshape", ".txt", false)
+      : null;
+
+    await runWithStereoSupport(inputPath, outputPath, tempDir, async (mono, out) => {
+      await runCdp("distort", envelArgs(params.shape, mono, out, { cyc, trough, exp, envfile }));
+    });
+  } finally {
+    for (const f of written) if (existsSync(f)) unlinkSync(f);
+  }
   return outputPath;
 }

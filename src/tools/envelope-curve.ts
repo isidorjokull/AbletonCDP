@@ -39,7 +39,7 @@ export function parseCurve(s: string): CurvePoint[] {
   const tok = s.trim() ? s.trim().split(/\s+/) : [];
   const pts: CurvePoint[] = [];
   for (let i = 0; i + 1 < tok.length; i += 2) {
-    const [vs, bs] = tok[i + 1].split(":");
+    const [vs, bs] = tok[i + 1]!.split(":");
     const t = Number(tok[i]);
     const v = Number(vs);
     const b = bs === undefined ? 0 : Number(bs);
@@ -69,14 +69,16 @@ export function curveToBreakpoints(
 ): [number, number][] | null {
   if (pts.length < 2) return null;
   const p = pts.map((q) => ({ ...q, v: clamp(q.v, range.min, range.max) }));
-  if (p[0].t > 0) p.unshift({ t: 0, v: p[0].v, b: 0 });
-  if (p[p.length - 1].t < 1) p.push({ t: 1, v: p[p.length - 1].v, b: 0 });
+  const first = p[0]!;
+  const last = p[p.length - 1]!;
+  if (first.t > 0) p.unshift({ t: 0, v: first.v, b: 0 });
+  if (last.t < 1) p.push({ t: 1, v: last.v, b: 0 });
 
   const span = scaleTime ? duration : 1;
-  const out: [number, number][] = [[0, p[0].v]];
+  const out: [number, number][] = [[0, p[0]!.v]];
   for (let i = 1; i < p.length; i++) {
-    const a = p[i - 1];
-    const z = p[i];
+    const a = p[i - 1]!;
+    const z = p[i]!;
     if (z.b !== 0) {
       const ya = toDisplay(a.v, range);
       const yz = toDisplay(z.v, range);
@@ -99,14 +101,14 @@ function spaceTimes(pairs: [number, number][], end: number): [number, number][] 
   if (pts.length > cap) {
     // keep first and last, sample the interior evenly
     const kept: [number, number][] = [];
-    for (let i = 0; i < cap; i++) kept.push(pts[Math.round((i * (pts.length - 1)) / (cap - 1))]);
+    for (let i = 0; i < cap; i++) kept.push(pts[Math.round((i * (pts.length - 1)) / (cap - 1))]!);
     pts = kept;
   }
   const t = pts.map((q) => q[0]);
-  for (let i = 1; i < t.length; i++) t[i] = Math.max(t[i], t[i - 1] + MIN_GAP);
-  t[t.length - 1] = Math.max(end, t[0] + MIN_GAP); // padding always ends the curve at `end`
-  for (let i = t.length - 2; i > 0; i--) t[i] = Math.min(t[i], t[i + 1] - MIN_GAP);
-  return pts.map((q, i) => [t[i], q[1]]);
+  for (let i = 1; i < t.length; i++) t[i] = Math.max(t[i]!, t[i - 1]! + MIN_GAP);
+  t[t.length - 1] = Math.max(end, t[0]! + MIN_GAP); // padding always ends the curve at `end`
+  for (let i = t.length - 2; i > 0; i--) t[i] = Math.min(t[i]!, t[i + 1]! - MIN_GAP);
+  return pts.map((q, i) => [t[i]!, q[1]]);
 }
 
 export function writeBreakpointFile(pairs: [number, number][], path: string): void {
