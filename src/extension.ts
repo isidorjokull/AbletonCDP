@@ -10,7 +10,8 @@ import {
 import { tmpdir } from "os";
 import { readFileSync, writeFileSync, existsSync, readdirSync, unlinkSync } from "fs";
 import { join } from "path";
-import { ensureWavInput, extractRegion } from "./runner.js";
+import { ensureWavInput, extractRegion, getPeaks } from "./runner.js";
+import { dialogClip, type ClipTiming, type DialogClip } from "./clipInfo.js";
 import { TOOLS, toolById, type ToolSpec, type ToolParams } from "./tools/registry.js";
 import {
   renderToolDialog,
@@ -286,6 +287,23 @@ async function processClip(
   return placeResult(clip, importedPath, spec.title, tempo, bounced);
 }
 
+/** Length, tempo and (when accurate) peaks of the clip a dialog opens on; never throws. */
+async function dialogClipFor(context: Ctx, clip: AudioClip<"1.0.0">): Promise<DialogClip> {
+  const tempo = context.application.song.tempo;
+  try {
+    const timing: ClipTiming = {
+      bounced: clip.parent instanceof AudioTrack, warping: clip.warping,
+      startTime: clip.startTime, endTime: clip.endTime, startMarker: clip.startMarker, endMarker: clip.endMarker,
+    };
+    return await dialogClip(timing, tempo, clip.filePath, getPeaks);
+  } catch {
+    return { seconds: NaN, tempo, peaks: null };
+  }
+}
+
+/** Tools with a curve editor render their dialog per open, so it knows the clip. */
+const hasCurves = (spec: ToolSpec) => spec.params.some((p) => p.type === "curves");
+
 function registerTool(context: Ctx, tempDir: string, spec: ToolSpec): void {
   const html = renderToolDialog(spec);
   const [w, h] = toolDialogSize(spec);
@@ -294,7 +312,8 @@ function registerTool(context: Ctx, tempDir: string, spec: ToolSpec): void {
     void (async (handle: Handle) => {
       try {
         const clip = context.getObjectFromHandle(handle, AudioClip);
-        const result = await context.ui.showModalDialog(dataUrl(html), w, h);
+        const page = hasCurves(spec) ? renderToolDialog(spec, null, await dialogClipFor(context, clip)) : html;
+        const result = await context.ui.showModalDialog(dataUrl(page), w, h);
         if (!result) return;
         const params = JSON.parse(result) as ToolParams | null;
         if (!params) return;
@@ -381,6 +400,7 @@ function registerRack(context: Ctx, tempDir: string): void {
             clipName: clip.name,
             recent: rackMemory.recent,
             closeUrl: endpointPort === null ? null : `http://127.0.0.1:${endpointPort}/dialog/wait`,
+            clip: await dialogClipFor(context, clip),
           });
           rack.open = true;
           try {
@@ -456,8 +476,9 @@ function registerRepeatLast(context: Ctx, tempDir: string): void {
           return;
         }
         const [w, h] = toolDialogSize(spec);
+        const dclip = hasCurves(spec) ? await dialogClipFor(context, clip) : null;
         const result = await context.ui.showModalDialog(
-          dataUrl(renderToolDialog(spec, rackMemory.params)), w, h
+          dataUrl(renderToolDialog(spec, rackMemory.params, dclip)), w, h
         );
         if (!result) return;
         const params = JSON.parse(result) as ToolParams | null;

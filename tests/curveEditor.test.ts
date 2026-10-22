@@ -178,3 +178,13 @@ test("the Rack renders the same editor for this tool", () => {
   assert.ok(w.document.querySelector("svg.cv-ed"));
   assert.ok(w.document.querySelector('.cv-chip[data-preset="wobble"]'));
 });
+
+test("the Waveset Envelope dialog fits under the 680 px cap", async () => {
+  const { toolDialogSize } = await import("../src/ui/dialog.js");
+  assert.ok(toolDialogSize(toolById("cdp.wsEnvelope")!)[1] <= 680);
+});
+
+test("the dialog embeds the clip it was opened on", () => {
+  const html = renderToolDialog(toolById("cdp.wsEnvelope")!, null, { seconds: 4, tempo: 120, peaks: null });
+  assert.ok(html.includes('var CLIP={"seconds":4'));
+});

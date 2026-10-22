@@ -48,3 +48,22 @@ test("getPeaks: normalised per-bucket peaks of a region", async () => {
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("dialogClip: length, tempo and peaks of the source region", async () => {
+  const { dialogClip } = await import("../src/clipInfo.js");
+  const calls: unknown[][] = [];
+  const peaks = async (...a: unknown[]) => { calls.push(a); return [0.5, 1]; };
+  const c = await dialogClip(timing({ startMarker: 1.5, endMarker: 3.5 }), 120, "/x.wav", peaks);
+  assert.deepEqual(c, { seconds: 2, tempo: 120, peaks: [0.5, 1] });
+  assert.deepEqual(calls[0], ["/x.wav", 1.5, 2, 180]);
+});
+
+test("dialogClip: no peaks for a warped arrangement clip, and a failed scan is not an error", async () => {
+  const { dialogClip } = await import("../src/clipInfo.js");
+  const never = async () => { throw new Error("should not scan"); };
+  const a = await dialogClip(timing({ bounced: true, warping: true, endTime: 8 }), 120, "/x.wav", never);
+  assert.deepEqual(a, { seconds: 4, tempo: 120, peaks: null });
+  const b = await dialogClip(timing({ startMarker: 0, endMarker: 2 }), 120, "/x.wav", never);
+  assert.equal(b.peaks, null);
+  assert.equal(b.seconds, 2);
+});

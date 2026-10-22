@@ -26,6 +26,27 @@ export function clipSeconds(c: ClipTiming, tempo: number): number {
   return s > 0 ? s : NaN;
 }
 
+/** Waveform resolution handed to the curve editor (about two buckets per editor pixel). */
+const PEAK_BUCKETS = 180;
+
+/**
+ * Everything a dialog gets to know about its clip. Never throws: a failed peak
+ * scan just means no waveform, an unknown length disables Beat sync.
+ */
+export async function dialogClip(
+  c: ClipTiming,
+  tempo: number,
+  filePath: string,
+  peaks: (file: string, start: number, dur: number, buckets: number) => Promise<number[]>
+): Promise<DialogClip> {
+  const region = peakRegion(c, tempo);
+  let p: number[] | null = null;
+  if (region && filePath) {
+    try { p = await peaks(filePath, region.start, region.dur, PEAK_BUCKETS); } catch { p = null; }
+  }
+  return { seconds: clipSeconds(c, tempo), tempo, peaks: p };
+}
+
 /**
  * The source-file region whose peaks match what gets processed. A warped
  * arrangement clip is only known after the bounce (after the dialog closes),

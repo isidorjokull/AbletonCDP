@@ -125,3 +125,17 @@ test("mode 4 with no shape drawn uses the pluck shape with times in 0..1", async
   assert.equal(lines.at(-1)!.split(" ")[0], "1.000000");
   assert.deepEqual(dataFilesLeft(td), []);
 });
+
+test("the registry run passes a drawn shape to mode 4", async () => {
+  const { toolById } = await import("../src/tools/registry.js");
+  const td = mkdtempSync(join(work, "td-"));
+  const inp = tone("reg.wav", 2);
+  await toolById("cdp.wsEnvelope")!.run(inp, {
+    shape: "user", cycleCnt: 64, trough: 0.006, exponent: 6, curves: "",
+    cycleCntCurve: "", troughCurve: "", exponentCurve: "", shapeCurve: "0 0 0.5 1 1 0",
+  }, td);
+  const args = logText().split("\n").find((l) => l.startsWith("ARGS "))!.split(" ");
+  assert.deepEqual([args[1], args[2]], ["envel", "4"]);
+  assert.match(args[5], /\.txt$/);
+  assert.deepEqual(firstFile(logText()), ["0.000000 0.000000", "0.500000 1.000000", "1.000000 0.000000"]);
+});
