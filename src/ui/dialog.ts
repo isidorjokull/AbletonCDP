@@ -1,5 +1,7 @@
 import type { ParamSpec, ToolSpec } from "../tools/registry.js";
 import { GROUP_ORDER } from "../tools/registry.js";
+import type { DialogClip } from "../clipInfo.js";
+import { CURVE_CSS, CURVE_JS } from "./curveEditor.js";
 
 /* ------------------------------------------------------------------ */
 /* Shared panel styling — quiet hardware-module look                   */
@@ -179,6 +181,8 @@ function buildParams(container,spec,init){
       x.setAttribute('aria-label',p.label);
       x.addEventListener('input',function(){state[p.key]=x.value});
       row.appendChild(x);
+    }else if(p.type==='curves'){
+      buildCurves(row,p,state,init);
     }
     container.appendChild(row);
   });
@@ -212,8 +216,14 @@ function randomize(container,spec){
     if(p.type==='select')st[p.key]=p.options[Math.floor(Math.random()*p.options.length)].value;
     else if(p.type==='check')st[p.key]=Math.random()<0.5;
   });
-  // pass 2: sliders, within their now-effective range (skip hidden ones)
+  // pass 2: sliders, within their now-effective range (skip hidden ones).
+  // A curves param rolls its targets' fixed values and never touches a drawn curve.
   spec.forEach(function(p){
+    if(p.type==='curves'){
+      var mode=String(st[p.modeKey]);
+      p.targets.forEach(function(tg){if(tg.kind==='clip'&&tg.modes.indexOf(mode)>=0)st[tg.param]=rollSlider(tg,tg)});
+      return;
+    }
     if(p.type!=='slider')return;
     var eff=effFor(spec,p,st);if(eff.hide)return;
     st[p.key]=rollSlider(p,eff);
@@ -231,7 +241,7 @@ function embed(v: unknown): string {
 /* ------------------------------------------------------------------ */
 
 function rowHeight(p: ParamSpec): number {
-  return p.type === "check" ? 28 : p.type === "slider" ? 47 : 50;
+  return p.type === "check" ? 28 : p.type === "slider" ? 47 : p.type === "curves" ? 330 : 50;
 }
 
 function docsHeight(spec: ToolSpec): number {
@@ -247,19 +257,24 @@ export function toolDialogSize(spec: ToolSpec): [number, number] {
   return [380, Math.min(680, h)];
 }
 
-export function renderToolDialog(spec: ToolSpec, init: Record<string, unknown> | null = null): string {
+export function renderToolDialog(
+  spec: ToolSpec,
+  init: Record<string, unknown> | null = null,
+  clip: DialogClip | null = null
+): string {
   const clientSpec = spec.params;
   return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>CDP: ${spec.title}</title>
-<style>${CSS}</style></head><body>
+<style>${CSS}${CURVE_CSS}</style></head><body>
 <div class="hdr"><span class="led"></span><span class="name">${spec.title}</span><span class="brand">CDP</span></div>
 <div class="blurb">${spec.blurb}</div>
 <div class="params" id="params"></div>
 <div class="docs"><span class="cat">${spec.group}</span>${spec.docs}</div>
 <div class="ftr"><button class="dice" id="rnd" title="Randomize parameters">🎲 Random</button><span class="spacer"></span>
 <button id="cancel">Cancel</button><button class="pri" id="ok">Process</button></div>
-<script>${PARAM_JS}
+<script>${PARAM_JS}${CURVE_JS}
 var SPEC=${embed(clientSpec)};
 var INIT=${embed(init)};
+var CLIP=${embed(clip)};
 var box=document.getElementById('params');
 buildParams(box,SPEC,INIT);
 function ok(){send({method:'close_and_send',params:[JSON.stringify(collectFrom(box))]})}
@@ -293,6 +308,8 @@ export interface AllDialogState {
    * itself (the trigger button's "toggle off"). Null when the endpoint is down.
    */
   closeUrl?: string | null;
+  /** The clip's length, tempo and peaks, for curve editors. */
+  clip?: DialogClip | null;
 }
 
 export function renderAllDialog(tools: ToolSpec[], state: AllDialogState): string {
@@ -300,7 +317,7 @@ export function renderAllDialog(tools: ToolSpec[], state: AllDialogState): strin
     id: t.id, title: t.title, group: t.group, blurb: t.blurb, docs: t.docs, params: t.params,
   }));
   return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>CDP Rack</title>
-<style>${CSS}
+<style>${CSS}${CURVE_CSS}
 .pane{flex:1;display:flex;flex-direction:column;min-width:0}
 [hidden]{display:none!important}
 </style></head><body>
@@ -333,10 +350,11 @@ export function renderAllDialog(tools: ToolSpec[], state: AllDialogState): strin
   <button id="close">Close</button>
   <button class="pri" id="ok" hidden>Process</button>
 </div>
-<script>${PARAM_JS}
+<script>${PARAM_JS}${CURVE_JS}
 var TOOLS=${embed(clientTools)};
 var GROUPS=${embed(GROUP_ORDER)};
 var STATE=${embed(state)};
+var CLIP=STATE.clip||null;
 var curId=null;
 var paramBox=document.getElementById('params');
 document.getElementById('clip').textContent=STATE.clipName;

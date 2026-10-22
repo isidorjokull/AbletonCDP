@@ -65,10 +65,32 @@ import {
 } from "./waveset-shape.js";
 
 /** One dialog control. Rendered identically in per-tool and All dialogs. */
+/**
+ * One thing a `curves` param can draw: a fixed-value param (`param`) that may
+ * instead be a curve stored as a `t v` string under `curveKey`. `modes` lists
+ * the `modeKey` values it applies to; `kind: "shape"` is drawn over one
+ * envelope cycle instead of the clip.
+ */
+export interface CurveTarget {
+  param: string;
+  curveKey: string;
+  label: string;
+  min: number;
+  max: number;
+  log: boolean;
+  step: number;
+  def: number;
+  unit?: string;
+  modes: string[];
+  kind: "clip" | "shape";
+}
+
 export interface ParamSpec {
   key: string;
   label: string;
-  type: "slider" | "select" | "check" | "text";
+  /** `curves` is a composite: it owns its targets' fixed values and curve strings. */
+  type: "slider" | "select" | "check" | "text" | "curves";
+  targets?: CurveTarget[];
   min?: number;
   max?: number;
   step?: number;
@@ -666,7 +688,7 @@ export const TOOLS: ToolSpec[] = [
   {
     id: "cdp.wsEnvelope", title: "Waveset Envelope", group: "Waveset & Distort",
     blurb: "Tiny envelope over each group of wavecycles — buzzing tremolo.",
-    docs: "Imposes a rising, falling or dipped loudness shape over every group of wavecycles. Because the groups follow the waveform, the pulsing tracks the sound's own pitch — low notes pulse slowly, high notes buzz. Cycles / group sets the pulse size, Floor how far it dips, Curve bends the slope (1 = straight).",
+    docs: "Pick what to draw, start from a preset, drag points to refine (click adds, click a point deletes, Alt-drag bends). Fixed uses one value for the whole clip.",
     params: [
       {
         key: "shape", label: "Shape", type: "select", def: "falling",
@@ -674,14 +696,28 @@ export const TOOLS: ToolSpec[] = [
           { value: "falling", label: "Falling — plucked pulses" },
           { value: "rising", label: "Rising — reversed pulses" },
           { value: "troughed", label: "Troughed — dip in the middle" },
+          { value: "user", label: "User-defined — draw your own" },
         ],
       },
-      { key: "cycleCnt", label: "Cycles / group", type: "slider", min: 1, max: 100, step: 1, def: 10 },
-      { key: "trough", label: "Floor", type: "slider", min: 0, max: 1, step: 0.05, def: 0 },
-      { key: "exponent", label: "Curve", type: "slider", min: 0.2, max: 8, step: 0.1, def: 1 },
+      {
+        key: "curves", label: "Drawing", type: "curves", def: "", modeKey: "shape",
+        targets: [
+          { param: "cycleCnt", curveKey: "cycleCntCurve", label: "Cycles", min: 1, max: 1000, log: true, step: 1, def: 64,
+            modes: ["falling", "rising", "troughed", "user"], kind: "clip" },
+          { param: "trough", curveKey: "troughCurve", label: "Floor", min: 0, max: 1, log: false, step: 0.001, def: 0.006,
+            modes: ["falling", "rising", "troughed"], kind: "clip" },
+          { param: "exponent", curveKey: "exponentCurve", label: "Curve", min: 0.02, max: 50, log: true, step: 0.01, def: 6,
+            modes: ["falling", "rising", "troughed"], kind: "clip" },
+          { param: "shapeLevel", curveKey: "shapeCurve", label: "Shape", min: 0, max: 1, log: false, step: 0.01, def: 0,
+            modes: ["user"], kind: "shape" },
+        ],
+      },
     ],
     run: (i, p, td) => wavesetEnvelope(i, {
-      shape: String(p.shape) as WsEnvShape, cycleCnt: n(p.cycleCnt), trough: n(p.trough), exponent: n(p.exponent),
+      shape: String(p.shape) as WsEnvShape,
+      cycleCnt: n(p.cycleCnt ?? 64), trough: n(p.trough ?? 0.006), exponent: n(p.exponent ?? 6),
+      cycleCntCurve: String(p.cycleCntCurve ?? ""), troughCurve: String(p.troughCurve ?? ""),
+      exponentCurve: String(p.exponentCurve ?? ""), shapeCurve: String(p.shapeCurve ?? ""),
     }, td, td),
   },
   {
