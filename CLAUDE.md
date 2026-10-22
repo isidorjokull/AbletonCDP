@@ -57,7 +57,7 @@ Param types: `slider` | `select` | `check` | `text` | `curves`. Sliders support 
 
 ## Testing
 
-`npm test` runs `tsx --test tests/*.test.ts` (node:test via tsx — no framework dependency). 79 tests cover the endpoint, the listener, the LOM path parser, the clip resolver, Rack open/close state, the runner helpers, curve → breakpoint conversion, `distort envel` argument building (fake binary), clip length/peaks, and the curve editor in a real rendered dialog (jsdom, a devDependency — stub `window.webkit` and `SVGElement.prototype.getBoundingClientRect`, dispatch `MouseEvent`s typed `pointerdown`/`pointermove`/`pointerup`), all without Live.
+`npm test` runs `tsx --test tests/*.test.ts` (node:test via tsx — no framework dependency). 108 tests cover the endpoint, the listener, the LOM path parser, the clip resolver, Rack open/close state, the runner helpers, curve → breakpoint conversion, CDP argument order for the envelope, spectral (trace/suppress/pluck/freeze/arpeg/chorus), zigzag, scramble and delay tools (fake binaries in a temp `CDP_BIN_DIR` that log their arguments), clip length/peaks, and the curve editor in a real rendered dialog (jsdom, a devDependency — stub `window.webkit` and `SVGElement.prototype.getBoundingClientRect`, dispatch `MouseEvent`s typed `pointerdown`/`pointermove`/`pointerup`), all without Live.
 
 For CDP tools themselves, no framework. Use tsx harnesses in the scratchpad that import the real `src/tools/*` and run against CDP binaries on `scratchpad/audio/*.wav` (mono.wav / stereo.wav), asserting channel counts and RMS (via ffmpeg `astats`). Dialog logic is tested with **jsdom** (`runScripts: "dangerously"`, stub `window.webkit`), asserting mode-switch visibility and `collect()` payloads.
 
