@@ -29,8 +29,8 @@ before(() => {
   process.env["CDP_BIN_DIR"] = binDir;
   // pvoc anal 1 in out | pvoc synth in out
   script("pvoc", `if [ "$1" = anal ]; then cp "$3" "$4"; else cp "$2" "$3"; fi`);
-  // blur suppress in out N
-  script("blur", `cp "$2" "$3"`);
+  // blur suppress in out N | blur chorus <mode> in out …
+  script("blur", `case "$1" in chorus) cp "$3" "$4";; *) cp "$2" "$3";; esac`);
   // hilite trace|arpeg <mode> in out … | hilite pluck|bltr in out …
   script("hilite", `case "$1" in trace|arpeg) cp "$3" "$4";; *) cp "$2" "$3";; esac`);
   inp = join(work, "mono.wav");
@@ -132,4 +132,20 @@ test("above-boost and once-above with sine or saw start their sweep past half wa
 test("a wave CDP forbids for the mode is refused with a clear message", async () => {
   await assert.rejects(run("cdp.specArp", { mode: "belowBoost", wave: "down", rate: 2, top: 4000, boost: 8 }), /ramp down/i);
   await assert.rejects(run("cdp.specArp", { mode: "onceAbove", wave: "up", rate: 2, top: 4000, boost: 8 }), /ramp up/i);
+});
+
+test("Spectral Chorus maps what/direction onto blur chorus 1-7 with the right spreads", async () => {
+  const cases: [Record<string, unknown>, string][] = [
+    [{ fspread: 2 }, "blur chorus 2 IN OUT 2"],                                   // old saved params
+    [{ what: "amps", aspread: 32, fspread: 2, direction: "both" }, "blur chorus 1 IN OUT 32"],
+    [{ what: "freqs", aspread: 32, fspread: 2, direction: "up" }, "blur chorus 3 IN OUT 2"],
+    [{ what: "freqs", aspread: 32, fspread: 2, direction: "down" }, "blur chorus 4 IN OUT 2"],
+    [{ what: "both", aspread: 32, fspread: 2, direction: "both" }, "blur chorus 5 IN OUT 32 2"],
+    [{ what: "both", aspread: 32, fspread: 2, direction: "up" }, "blur chorus 6 IN OUT 32 2"],
+    [{ what: "both", aspread: 32, fspread: 2, direction: "down" }, "blur chorus 7 IN OUT 32 2"],
+  ];
+  for (const [p, want] of cases) {
+    await run("cdp.spectralChorus", p);
+    assert.equal(specCall(), want, JSON.stringify(p));
+  }
 });

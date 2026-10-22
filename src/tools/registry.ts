@@ -11,7 +11,7 @@ import { iterationFreeze } from "./iteration-freeze.js";
 import { overload } from "./overload.js";
 import { fractal } from "./fractal.js";
 import { spectralBlur } from "./spectral-blur.js";
-import { spectralChorus } from "./spectral-chorus.js";
+import { spectralChorus, type ChorusWhat, type ChorusDirection } from "./spectral-chorus.js";
 import { echo } from "./echo.js";
 import { wavesetRepeat } from "./waveset-repeat.js";
 import { wavesetReverse } from "./waveset-reverse.js";
@@ -420,9 +420,45 @@ export const TOOLS: ToolSpec[] = [
   {
     id: "cdp.spectralChorus", title: "Spectral Chorus", group: "Spectral",
     blurb: "Randomises partial frequencies — thick detuned shimmer.",
-    docs: "Scatters each spectral partial slightly off its true frequency, producing a thick, detuned chorus of many voices. Higher spread pushes the partials further apart — subtle widening at 1–2, seasick and dissolving toward 4.",
-    params: [{ key: "fspread", label: "Spread", type: "slider", min: 1, max: 4, step: 0.1, def: 2 }],
-    run: (i, p, td) => spectralChorus(i, { fspread: n(p.fspread) }, td, td),
+    docs: "Randomises every partial: Pitch scatters frequencies (a thick, detuned chorus — subtle at 1–2, seasick toward 4), Loudness scatters levels (a shimmering, twinkling surface), Both does the two. Direction lets frequencies drift only up or only down.",
+    params: [
+      {
+        key: "what", label: "Scatter", type: "select", def: "freqs",
+        options: [
+          { value: "freqs", label: "Pitch — detuned voices" },
+          { value: "amps", label: "Loudness — twinkling partials" },
+          { value: "both", label: "Both" },
+        ],
+      },
+      {
+        key: "direction", label: "Direction", type: "select", def: "both",
+        options: [
+          { value: "both", label: "Up and down" },
+          { value: "up", label: "Up only" },
+          { value: "down", label: "Down only" },
+        ],
+      },
+      {
+        key: "fspread", label: "Spread", type: "slider", min: 1, max: 4, step: 0.1, def: 2, modeKey: "what",
+        modeCfg: {
+          freqs: { label: "Pitch spread", min: 1, max: 4, step: 0.1, def: 2 },
+          amps: { label: "", min: 1, max: 4, step: 0.1, def: 2, hide: true },
+          both: { label: "Pitch spread", min: 1, max: 4, step: 0.1, def: 2 },
+        },
+      },
+      {
+        key: "aspread", label: "Loudness spread", type: "slider", min: 1, max: 1028, step: 1, def: 32, log: true, modeKey: "what",
+        modeCfg: {
+          freqs: { label: "", min: 1, max: 1028, step: 1, def: 32, hide: true },
+          amps: { label: "Loudness spread", min: 1, max: 1028, step: 1, def: 32 },
+          both: { label: "Loudness spread", min: 1, max: 1028, step: 1, def: 32 },
+        },
+      },
+    ],
+    run: (i, p, td) => spectralChorus(i, {
+      fspread: n(p.fspread), what: (p.what ?? "freqs") as ChorusWhat,
+      direction: (p.direction ?? "both") as ChorusDirection, aspread: n(p.aspread ?? 32),
+    }, td, td),
   },
   {
     id: "cdp.echo", title: "Echo", group: "Time & Pitch",
