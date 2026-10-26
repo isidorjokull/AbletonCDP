@@ -30,7 +30,7 @@ Built on the **Ableton Extensions SDK** (1.0.0-beta.1). The extension shells out
 
 **Envelope Trigger** is a generative gate: it synthesises its own amplitude envelope and re-triggers the clip in a rhythm you design — **Beat sync** (locked to Live's tempo), **Time** (fixed seconds), **Random** (scattered hits), or **Bounce** (bouncing-ball spacing that accelerates or decelerates). Attack, Release, and Floor shape each hit. No donor file required.
 
-**Cross & Morph** effects combine the clip with a **second sound**, picked from a list of the set's other audio clips (or the clip itself, straight or reversed) in the effect's dialog. Right-click a clip → `CDP: Use as Second Sound` to make it the default pick (marked ★). Arrangement clips are bounced as heard, and the second sound is matched to the clip's sample rate and channel count automatically. **Swap roles** runs the process the other way round.
+**Cross & Morph** effects combine the clip with a **second sound**, picked in the effect's dialog from the set's other audio clips, the clip itself (straight or reversed), or a generated sound — white or pink noise, a 55 Hz saw drone or a 220 Hz sine, as long as the clip (the classic vocoder carrier and ring-mod sources). Right-click a clip → `CDP: Use as Second Sound` to make it the default pick (marked ★). Arrangement clips are bounced as heard, and the second sound is matched to the clip's sample rate and channel count automatically. **Swap roles** runs the process the other way round.
 
 ---
 

@@ -20,6 +20,10 @@ The SDK has no file picker, and its only UI is a modal dialog. But it can walk
 
 - **This clip** and **This clip, reversed**, which cover the "same root" cases
   with no setup.
+- **Generated sounds** (added later the same day, standing in for CDP Express's
+  `default_mod` and synth entries): white or pink noise, a 55 Hz saw drone and a
+  220 Hz sine, each as long as the clip. They are made with ffmpeg rather than
+  CDP's `synth`, because that binary has never been launched (Gatekeeper rule).
 - **Every other audio clip in the set**: arrangement clips labelled
   `Track · clip @ beat N` (the SDK has no time signature, so no bars) and session clips labelled `Track · clip (slot N)`,
   capped at 200. MIDI clips and the processed clip itself are left out.

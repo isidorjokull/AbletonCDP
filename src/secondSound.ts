@@ -28,9 +28,19 @@ export interface SecondSoundList { options: SourceOption[]; def: string }
 /** Enough for any real set; a select with thousands of rows is unusable anyway. */
 const MAX_CLIPS = 200;
 
+/** Generated sounds (as CDP Express's default_mod / synth entries were), made at the clip's length. */
+export const SYNTHS = {
+  "synth:white": "Synth · white noise",
+  "synth:pink": "Synth · pink noise",
+  "synth:saw55": "Synth · saw drone (55 Hz)",
+  "synth:sine220": "Synth · sine (220 Hz)",
+} as const;
+export type SynthKind = keyof typeof SYNTHS;
+
 const SELF_OPTIONS: SourceOption[] = [
   { value: SELF, label: "This clip" },
   { value: SELF_REV, label: "This clip, reversed" },
+  ...Object.entries(SYNTHS).map(([value, label]) => ({ value, label })),
 ];
 
 /**
@@ -81,13 +91,14 @@ function beat(c: unknown): string {
   return String(b);
 }
 
-/** The clip a dialog value names, SELF / SELF_REV, or null if that position holds no audio clip. */
+/** The clip a dialog value names, SELF / SELF_REV / a synth, or null if that position holds no audio clip. */
 export function resolveSecondSound(
   tracks: ReadonlyArray<TrackLike>,
   value: string,
   isAudio: (clip: unknown) => boolean
-): ClipLike | typeof SELF | typeof SELF_REV | null {
+): ClipLike | typeof SELF | typeof SELF_REV | SynthKind | null {
   if (value === SELF || value === SELF_REV) return value;
+  if (Object.hasOwn(SYNTHS, value)) return value as SynthKind;
   const m = /^([as]):(\d+):(\d+)$/.exec(value);
   if (!m) return null;
   const track = tracks[Number(m[2])];

@@ -1,8 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  listSecondSounds, resolveSecondSound, SELF, SELF_REV, type TrackLike, type ClipLike,
+  listSecondSounds, resolveSecondSound, SELF, SELF_REV, SYNTHS, type TrackLike, type ClipLike,
 } from "../src/secondSound.js";
+
+const SYNTH_VALUES = Object.keys(SYNTHS);
 
 let nextId = 1n;
 const clip = (name: string, startTime = 0, endTime = 4, audio = true): ClipLike & { audio: boolean } =>
@@ -23,13 +25,14 @@ function set() {
   return { tracks, target, pad, early, sess, midi };
 }
 
-test("lists self options, then every other audio clip with track-qualified labels", () => {
+test("lists self and synth options, then every other audio clip with track-qualified labels", () => {
   const { tracks, target } = set();
   const { options } = listSecondSounds(tracks, target, isAudio, null);
-  assert.deepEqual(options.map((o) => o.value), [SELF, SELF_REV, "a:1:0", "a:1:1", "s:1:1"]);
-  assert.equal(options[2]!.label, "Pads · early @ beat 1");
-  assert.equal(options[3]!.label, "Pads · pad @ beat 13");
-  assert.equal(options[4]!.label, "Pads · loop (slot 2)");
+  assert.deepEqual(options.map((o) => o.value), [SELF, SELF_REV, ...SYNTH_VALUES, "a:1:0", "a:1:1", "s:1:1"]);
+  const clips = options.slice(2 + SYNTH_VALUES.length);
+  assert.equal(clips[0]!.label, "Pads · early @ beat 1");
+  assert.equal(clips[1]!.label, "Pads · pad @ beat 13");
+  assert.equal(clips[2]!.label, "Pads · loop (slot 2)");
 });
 
 test("defaults to an arrangement clip on another track that overlaps the target", () => {
@@ -65,6 +68,9 @@ test("resolves values back to clips, and refuses stale or non-audio positions", 
   assert.equal(resolveSecondSound(tracks, "s:1:1", isAudio), sess);
   assert.equal(resolveSecondSound(tracks, SELF, isAudio), SELF);
   assert.equal(resolveSecondSound(tracks, SELF_REV, isAudio), SELF_REV);
+  assert.equal(resolveSecondSound(tracks, "synth:pink", isAudio), "synth:pink");
+  assert.equal(resolveSecondSound(tracks, "synth:nope", isAudio), null);
+  assert.equal(resolveSecondSound(tracks, "toString", isAudio), null);
   assert.equal(resolveSecondSound(tracks, "a:2:0", isAudio), null); // midi
   assert.equal(resolveSecondSound(tracks, "a:9:0", isAudio), null);
   assert.equal(resolveSecondSound(tracks, "s:1:0", isAudio), null); // empty slot
@@ -78,5 +84,5 @@ test("caps the list so a huge set still renders", () => {
     { name: "T", arrangementClips: [target], clipSlots: [] },
     { name: "M", arrangementClips: many, clipSlots: [] },
   ], target, isAudio, null);
-  assert.equal(options.length, 2 + 200);
+  assert.equal(options.length, 2 + SYNTH_VALUES.length + 200);
 });

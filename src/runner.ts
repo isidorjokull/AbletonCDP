@@ -305,6 +305,26 @@ export async function reverseAudio(filePath: string, tempDir: string): Promise<s
   return out;
 }
 
+/** lavfi sources for secondSound.ts's SYNTHS. */
+const SYNTH_SOURCES: Record<string, string> = {
+  "synth:white": "anoisesrc=color=white:amplitude=0.5",
+  "synth:pink": "anoisesrc=color=pink:amplitude=0.5",
+  "synth:saw55": "aevalsrc=exprs=0.4*(2*mod(55*t\\,1)-1)",
+  "synth:sine220": "aevalsrc=exprs=0.4*sin(2*PI*220*t)",
+};
+
+/** A generated second sound (`synth:*`), `seconds` long, as a 24-bit 44.1 kHz mono WAV in tempDir. */
+export async function synthSound(kind: string, seconds: number, tempDir: string): Promise<string> {
+  const src = SYNTH_SOURCES[kind];
+  if (!src) throw new Error(`Unknown synth sound "${kind}".`);
+  const out = join(tempDir, `${kind.replace(/\W/g, "_")}_${Date.now()}.wav`);
+  await runFfmpeg([
+    "-y", "-f", "lavfi", "-i", `${src}:sample_rate=44100`,
+    "-t", Math.max(0.05, seconds).toFixed(4), "-ac", "1", "-c:a", "pcm_s24le", out,
+  ]);
+  return out;
+}
+
 /** The first `seconds` of a file (whole file if shorter), in tempDir. */
 export async function trimAudio(filePath: string, seconds: number, tempDir: string): Promise<string> {
   const out = join(tempDir, `${basename(filePath, extname(filePath))}_trim_${Date.now()}.wav`);

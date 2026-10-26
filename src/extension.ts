@@ -10,7 +10,7 @@ import {
 import { tmpdir } from "os";
 import { readFileSync, writeFileSync, existsSync, readdirSync, unlinkSync } from "fs";
 import { join } from "path";
-import { ensureWavInput, extractRegion, getPeaks, reverseAudio } from "./runner.js";
+import { ensureWavInput, extractRegion, getPeaks, reverseAudio, synthSound, getAudioDuration } from "./runner.js";
 import { dialogClip, type ClipTiming, type DialogClip } from "./clipInfo.js";
 import { listSecondSounds, resolveSecondSound, SELF, SELF_REV, type TrackLike } from "./secondSound.js";
 import { TOOLS, toolById, toolDefaults, type ToolSpec, type ToolParams } from "./tools/registry.js";
@@ -273,12 +273,14 @@ const songTracks = (context: Ctx) => context.application.song.tracks as unknown 
 
 /**
  * The audio of a dialog's "Second sound" pick: the clip itself (`input`),
- * reversed, or another clip of the set prepared exactly like the main input.
+ * reversed, a generated sound as long as the clip, or another clip of the set
+ * prepared exactly like the main input.
  */
 async function secondAudio(context: Ctx, value: string, input: string, tempDir: string, tempo: number): Promise<string> {
   const picked = resolveSecondSound(songTracks(context), value, isAudioClip);
   if (picked === SELF) return input;
   if (picked === SELF_REV) return reverseAudio(input, tempDir);
+  if (typeof picked === "string") return synthSound(picked, await getAudioDuration(input), tempDir);
   if (!picked) {
     throw new Error("The clip chosen as the second sound is no longer there. Open the effect's dialog and pick it again.");
   }
