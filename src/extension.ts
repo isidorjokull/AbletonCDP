@@ -13,7 +13,7 @@ import { join } from "path";
 import { ensureWavInput, extractRegion, getPeaks, reverseAudio } from "./runner.js";
 import { dialogClip, type ClipTiming, type DialogClip } from "./clipInfo.js";
 import { listSecondSounds, resolveSecondSound, SELF, SELF_REV, type TrackLike } from "./secondSound.js";
-import { TOOLS, toolById, type ToolSpec, type ToolParams } from "./tools/registry.js";
+import { TOOLS, toolById, toolDefaults, type ToolSpec, type ToolParams } from "./tools/registry.js";
 import {
   renderToolDialog,
   toolDialogSize,
@@ -292,8 +292,9 @@ async function processClip(
   tempDir: string,
   clip: AudioClip<"1.0.0">,
   spec: ToolSpec,
-  params: ToolParams
+  saved: ToolParams
 ): Promise<AudioClip<"1.0.0"> | null> {
+  const params: ToolParams = { ...toolDefaults(spec), ...saved }; // fills params newer than the saved settings
   const tempo = context.application.song.tempo;
   const parent = clip.parent;
   const bounced = parent instanceof AudioTrack; // see clipAudio

@@ -1,4 +1,4 @@
-import { runCdp, buildOutputPath } from "../runner.js";
+import { buildOutputPath, runPvocex2 } from "../runner.js";
 
 export interface SpectralFreezeParams {
   stretch: number; // time stretch ratio (4–50) — higher = more frozen
@@ -11,6 +11,6 @@ export async function spectralFreeze(
 ): Promise<string> {
   const outputPath = buildOutputPath(inputPath, "specfreeze", outputDir);
   // pvocex2 -T<ratio> handles mono and stereo; extreme ratios create a "frozen" texture
-  await runCdp("pvocex2", [`-T${params.stretch}`, inputPath, outputPath]);
+  await runPvocex2(`-T${params.stretch}`, params.stretch, inputPath, outputPath);
   return outputPath;
 }

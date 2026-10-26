@@ -382,6 +382,24 @@ async function runPair(
   }
 }
 
+/**
+ * `pvocex2 <flag> in out`, cut to `ratio` × the input's length. pvocex2 pads
+ * its output with trailing silence (3 s in → 3.69 s at -T1, 7.40 s at -T2,
+ * 3.67 s at any -P); there is no latency — a click at 1 s comes out at 1 s
+ * (×ratio) — so trimming the end restores the exact length.
+ */
+export async function runPvocex2(flag: string, ratio: number, inputPath: string, outputPath: string): Promise<void> {
+  const dur = await getAudioDuration(inputPath);
+  const raw = join(dirname(outputPath), `${basename(outputPath, extname(outputPath))}_raw.wav`);
+  try {
+    await runCdp("pvocex2", [flag, inputPath, raw]);
+    const { codec } = await getAudioFormat(raw);
+    await runFfmpeg(["-y", "-i", raw, "-t", (dur * ratio).toFixed(6), "-c:a", codec, outputPath]);
+  } finally {
+    cleanup(raw);
+  }
+}
+
 /** Joins audio files end to end (same channel count / sample rate) into outputPath. */
 export async function concatAudio(inputs: string[], outputPath: string): Promise<void> {
   const args = ["-y"];

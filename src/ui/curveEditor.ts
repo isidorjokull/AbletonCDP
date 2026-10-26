@@ -92,7 +92,8 @@ function buildCurves(row,p,state,init){
     if(state[tg.curveKey]===undefined)state[tg.curveKey]=(init&&init[tg.curveKey]!==undefined)?init[tg.curveKey]:'';
   });
   var mode=String(state[p.modeKey]);
-  var valid=p.targets.filter(function(tg){return tg.modes.indexOf(mode)>=0});
+  // no modeKey / no modes: the target applies whatever the mode
+  var valid=p.targets.filter(function(tg){return !p.modeKey||!tg.modes||tg.modes.indexOf(mode)>=0});
   if(!valid.length)return;
   var cur=valid.filter(function(tg){return tg.param===ui.target})[0]||valid[0];
   ui.target=cur.param;

@@ -236,7 +236,7 @@ function randomize(container,spec){
   spec.forEach(function(p){
     if(p.type==='curves'){
       var mode=String(st[p.modeKey]);
-      p.targets.forEach(function(tg){if(tg.kind==='clip'&&tg.modes.indexOf(mode)>=0)st[tg.param]=rollSlider(tg,tg)});
+      p.targets.forEach(function(tg){if(tg.kind==='clip'&&(!p.modeKey||!tg.modes||tg.modes.indexOf(mode)>=0))st[tg.param]=rollSlider(tg,tg)});
       return;
     }
     if(p.type!=='slider')return;

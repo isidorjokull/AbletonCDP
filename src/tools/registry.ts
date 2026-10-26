@@ -75,8 +75,9 @@ import {
 /**
  * One thing a `curves` param can draw: a fixed-value param (`param`) that may
  * instead be a curve stored as a `t v` string under `curveKey`. `modes` lists
- * the `modeKey` values it applies to; `kind: "shape"` is drawn over one
- * envelope cycle instead of the clip.
+ * the `modeKey` values it applies to (omitted, or a curves param without a
+ * `modeKey`: always); `kind: "shape"` is drawn over one envelope cycle instead
+ * of the clip.
  */
 export interface CurveTarget {
   param: string;
@@ -88,7 +89,7 @@ export interface CurveTarget {
   step: number;
   def: number;
   unit?: string;
-  modes: string[];
+  modes?: string[];
   kind: "clip" | "shape";
 }
 
@@ -141,10 +142,17 @@ export const TOOLS: ToolSpec[] = [
   },
   {
     id: "cdp.timestretch", title: "Time Stretch", group: "Time & Pitch",
-    blurb: "Phase-vocoder stretch, pitch unchanged.",
-    docs: "Changes duration while holding pitch. Below 1× the clip speeds up, above 1× it slows down. Extreme ratios smear transients into a wash — for that on purpose, use Spectral Freeze instead.",
-    params: [{ key: "ratio", label: "Stretch", type: "slider", min: 0.25, max: 4, step: 0.05, def: 1.5, unit: "×" }],
-    run: (i, p, td) => timeStretch(i, { ratio: n(p.ratio) }, td),
+    blurb: "Phase-vocoder stretch, pitch unchanged — fixed or drawn over the clip.",
+    docs: "Changes duration while holding pitch. Below 1× the clip speeds up, above 1× it slows down. Fixed uses one ratio; pick Ramp up or down, Wobble, Steps or draw your own to vary the stretch through the clip (CDP's stretch time, as in CDP Express) — e.g. normal speed easing into a huge slow-down at the end. Extreme ratios smear transients into a wash.",
+    params: [
+      {
+        key: "curves", label: "Stretch", type: "curves", def: "",
+        targets: [
+          { param: "ratio", curveKey: "ratioCurve", label: "Stretch", min: 0.1, max: 16, log: true, step: 0.01, def: 1.5, unit: "×", kind: "clip" },
+        ],
+      },
+    ],
+    run: (i, p, td) => timeStretch(i, { ratio: n(p.ratio ?? 1.5), ratioCurve: String(p.ratioCurve ?? "") }, td, td),
   },
   {
     id: "cdp.spectralFreeze", title: "Spectral Freeze", group: "Spectral",
@@ -729,7 +737,7 @@ export const TOOLS: ToolSpec[] = [
   {
     id: "cdp.varispeed", title: "Vari-speed", group: "Time & Pitch",
     blurb: "Tape-style speed change: transpose, accelerate or vibrato.",
-    docs: "Changes playback speed like a tape machine, so pitch and length move together — unlike Pitch Shift, which holds the length. Transpose shifts by semitones (up = shorter). Accelerate ramps the speed to a multiple of the original by the goal point (below 1× decelerates). Vibrato wobbles the speed at the given rate and depth.",
+    docs: "Changes playback speed like a tape machine, so pitch and length move together — unlike Pitch Shift, which holds the length. Transpose shifts by semitones (up = shorter) — draw it to glide like a tape slowing down or spinning up (CDP Express's \"speed\" with a breakpoint file). Accelerate ramps the speed to a multiple of the original by the goal point (below 1× decelerates). Vibrato wobbles the speed; its rate and depth can be drawn too, e.g. a vibrato that grows.",
     params: [
       {
         key: "mode", label: "Mode", type: "select", def: "transpose",
@@ -740,23 +748,43 @@ export const TOOLS: ToolSpec[] = [
         ],
       },
       {
-        key: "amount", label: "Semitones", type: "slider", min: -24, max: 24, step: 0.5, def: -5, unit: " st", modeKey: "mode",
+        key: "accel", label: "Speed reached", type: "slider", min: 0.25, max: 4, step: 0.05, def: 2, unit: "×", modeKey: "mode",
         modeCfg: {
-          transpose: { label: "Semitones", min: -24, max: 24, step: 0.5, def: -5 },
-          accelerate: { label: "Speed reached (×)", min: 0.25, max: 4, step: 0.05, def: 2 },
-          vibrato: { label: "Rate (Hz)", min: 0.5, max: 30, step: 0.5, def: 6 },
+          transpose: { label: "", min: 0.25, max: 4, step: 0.05, def: 2, hide: true },
+          accelerate: { label: "Speed reached", min: 0.25, max: 4, step: 0.05, def: 2 },
+          vibrato: { label: "", min: 0.25, max: 4, step: 0.05, def: 2, hide: true },
         },
       },
       {
-        key: "amount2", label: "Amount", type: "slider", min: 0, max: 1, step: 1, def: 0, modeKey: "mode",
+        key: "goal", label: "Goal position", type: "slider", min: 0.05, max: 1, step: 0.05, def: 0.8, modeKey: "mode",
         modeCfg: {
-          transpose: { label: "Amount", min: 0, max: 1, step: 1, def: 0, hide: true },
+          transpose: { label: "", min: 0.05, max: 1, step: 0.05, def: 0.8, hide: true },
           accelerate: { label: "Goal position", min: 0.05, max: 1, step: 0.05, def: 0.8 },
-          vibrato: { label: "Depth (semitones)", min: 0.1, max: 12, step: 0.1, def: 1 },
+          vibrato: { label: "", min: 0.05, max: 1, step: 0.05, def: 0.8, hide: true },
         },
       },
+      {
+        key: "curves", label: "Drawing", type: "curves", def: "", modeKey: "mode",
+        targets: [
+          { param: "amount", curveKey: "amountCurve", label: "Semitones", min: -36, max: 36, log: false, step: 0.5, def: -5, unit: " st",
+            modes: ["transpose"], kind: "clip" },
+          { param: "vibRate", curveKey: "vibRateCurve", label: "Rate", min: 0.1, max: 30, log: true, step: 0.1, def: 6, unit: " Hz",
+            modes: ["vibrato"], kind: "clip" },
+          { param: "vibDepth", curveKey: "vibDepthCurve", label: "Depth", min: 0.05, max: 12, log: true, step: 0.05, def: 1, unit: " st",
+            modes: ["vibrato"], kind: "clip" },
+        ],
+      },
     ],
-    run: (i, p, td) => varispeed(i, { mode: String(p.mode) as SpeedMode, amount: n(p.amount), amount2: n(p.amount2) }, td),
+    run: (i, p, td) => {
+      const mode = String(p.mode) as SpeedMode;
+      // Settings saved before curves (Repeat Last) kept everything in amount / amount2.
+      if (mode === "accelerate") return varispeed(i, { mode, amount: n(p.accel ?? p.amount), amount2: n(p.goal ?? p.amount2) }, td);
+      if (mode === "vibrato") return varispeed(i, {
+        mode, amount: n(p.vibRate ?? p.amount), amount2: n(p.vibDepth ?? p.amount2),
+        amountCurve: String(p.vibRateCurve ?? ""), amount2Curve: String(p.vibDepthCurve ?? ""),
+      }, td);
+      return varispeed(i, { mode, amount: n(p.amount), amount2: 0, amountCurve: String(p.amountCurve ?? "") }, td);
+    },
   },
   {
     id: "cdp.bitcrush", title: "Bitcrush", group: "Waveset & Distort",
@@ -2201,6 +2229,23 @@ export const TOOLS: ToolSpec[] = [
 export const GROUP_ORDER: ToolSpec["group"][] = [
   "Time & Pitch", "Spectral", "Waveset & Distort", "Cut & Shuffle", "Envelope", "Ambient & Space", "Cross & Morph",
 ];
+
+/**
+ * Every value a tool's dialog would send untouched: each param's default, and a
+ * curves param's targets (fixed value + empty curve). Lay saved params over it
+ * so settings stored before a param existed (Repeat Last) still run.
+ */
+export function toolDefaults(spec: ToolSpec): ToolParams {
+  const out: ToolParams = {};
+  for (const p of spec.params) {
+    out[p.key] = p.def;
+    for (const tg of p.targets ?? []) {
+      out[tg.param] = tg.def;
+      out[tg.curveKey] = "";
+    }
+  }
+  return out;
+}
 
 export function toolById(id: string): ToolSpec | undefined {
   return TOOLS.find((t) => t.id === id);

@@ -5,7 +5,7 @@ import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
-  conformTo, runPairWithStereoSupport, reverseAudio, normalizePeak, getChannelCount, getAudioDuration,
+  conformTo, runPairWithStereoSupport, reverseAudio, normalizePeak, getChannelCount, getAudioDuration, runPvocex2,
 } from "../src/runner.js";
 import { getFfmpegPath, getFfprobePath } from "../src/config.js";
 
@@ -33,6 +33,10 @@ before(() => {
   const p = join(binDir, "interlx");
   writeFileSync(p, `#!/bin/sh\n"${getFfmpegPath()}" -v error -y -i "$2" -i "$3" -filter_complex "[0:a][1:a]join=inputs=2:channel_layout=stereo" "$1"\n`);
   chmodSync(p, 0o755);
+  // pvocex2 <flag> in out → the input plus 0.7 s of silence, like the real one's padding
+  const pv = join(binDir, "pvocex2");
+  writeFileSync(pv, `#!/bin/sh\n"${getFfmpegPath()}" -v error -y -i "$2" -af apad=pad_dur=0.7 "$3"\n`);
+  chmodSync(pv, 0o755);
   mono44 = join(work, "m44.wav"); stereo44 = join(work, "s44.wav"); mono48 = join(work, "m48.wav");
   ff("-f", "lavfi", "-i", "sine=frequency=220:duration=1", "-ar", "44100", "-ac", "1", mono44);
   ff("-f", "lavfi", "-i", "sine=frequency=330:duration=1", "-ar", "44100", "-ac", "2", stereo44);
@@ -106,4 +110,13 @@ test("normalizePeak brings the peak to the target level", async () => {
   const out = join(work, "norm.wav");
   await normalizePeak(quiet, out, -1);
   assert.ok(Math.abs(astatsPeak(out) - -1) < 0.3, `peak ${astatsPeak(out)}`);
+});
+
+test("runPvocex2 cuts pvocex2's trailing padding to ratio × the input length", async () => {
+  const out = join(work, "pv.wav");
+  await runPvocex2("-T1", 1, mono44, out);
+  assert.ok(Math.abs((await getAudioDuration(out)) - 1) < 0.002, String(await getAudioDuration(out)));
+  const half = join(work, "pv-half.wav");
+  await runPvocex2("-T0.5", 0.5, mono44, half);
+  assert.ok(Math.abs((await getAudioDuration(half)) - 0.5) < 0.002);
 });
