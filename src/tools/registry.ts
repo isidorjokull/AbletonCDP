@@ -170,18 +170,27 @@ export const TOOLS: ToolSpec[] = [
   },
   {
     id: "cdp.brassage", title: "Brassage", group: "Time & Pitch",
-    blurb: "CDP's flagship granulator — rebuilds the sound grain by grain.",
-    docs: "Reconstitutes the clip from a stream of tiny grains, giving independent control over speed, density, size and pitch — the deep granular engine at the heart of CDP. Speed below 1 stretches time (0.5 = half speed); Density above 1 overlaps grains into a thick wash, below 1 opens gaps; Grain size shifts it from fine dust to chunky stutter; Jitter scatters grain timing. Outputs a spatialised stereo texture.",
+    blurb: "CDP's flagship granulator — rebuilds the sound grain by grain, every control drawable.",
+    docs: "Reconstitutes the clip from a stream of tiny grains, giving independent control over speed, density, size, pitch and position — the deep granular engine at the heart of CDP. Pick a control in the list, then keep it fixed or pick a shape or draw it over the clip: the line under the editor shows what every control is doing. Speed below 1 stretches time (0.5 = half speed); Density above 1 overlaps grains into a thick wash, below 1 opens gaps; Grain size shifts it from fine dust to chunky stutter; Jitter scatters grain timing; Pan moves the stream across the stereo field. Outputs a spatialised stereo texture.",
     params: [
-      { key: "velocity", label: "Speed", type: "slider", min: 0.1, max: 4, step: 0.05, def: 1, unit: "×" },
-      { key: "density", label: "Density", type: "slider", min: 0.2, max: 8, step: 0.1, def: 2 },
-      { key: "grainsize", label: "Grain size", type: "slider", min: 11, max: 200, step: 1, def: 50, unit: " ms" },
-      { key: "pitch", label: "Pitch", type: "slider", min: -12, max: 12, step: 0.5, def: 0, unit: " st" },
-      { key: "jitter", label: "Jitter", type: "slider", min: 0, max: 1, step: 0.05, def: 0.5 },
+      {
+        key: "curves", label: "Grains", type: "curves", def: "",
+        targets: [
+          { param: "velocity", curveKey: "velocityCurve", label: "Speed", min: 0.1, max: 4, log: true, step: 0.05, def: 1, unit: "×", kind: "clip" },
+          { param: "density", curveKey: "densityCurve", label: "Density", min: 0.2, max: 8, log: true, step: 0.1, def: 2, kind: "clip" },
+          { param: "grainsize", curveKey: "grainsizeCurve", label: "Grain size", min: 11, max: 200, log: true, step: 1, def: 50, unit: " ms", kind: "clip" },
+          { param: "pitch", curveKey: "pitchCurve", label: "Pitch", min: -12, max: 12, log: false, step: 0.5, def: 0, unit: " st", kind: "clip" },
+          { param: "jitter", curveKey: "jitterCurve", label: "Jitter", min: 0, max: 1, log: false, step: 0.05, def: 0.5, kind: "clip" },
+          { param: "space", curveKey: "spaceCurve", label: "Pan", min: 0.02, max: 0.98, log: false, step: 0.02, def: 0.5, kind: "clip" },
+        ],
+      },
     ],
     run: (i, p, td) => brassage(i, {
       velocity: n(p.velocity), density: n(p.density), grainsize: n(p.grainsize),
-      pitch: n(p.pitch), jitter: n(p.jitter),
+      pitch: n(p.pitch), jitter: n(p.jitter), space: n(p.space ?? 0.5),
+      velocityCurve: String(p.velocityCurve ?? ""), densityCurve: String(p.densityCurve ?? ""),
+      grainsizeCurve: String(p.grainsizeCurve ?? ""), pitchCurve: String(p.pitchCurve ?? ""),
+      jitterCurve: String(p.jitterCurve ?? ""), spaceCurve: String(p.spaceCurve ?? ""),
     }, td),
   },
   {
