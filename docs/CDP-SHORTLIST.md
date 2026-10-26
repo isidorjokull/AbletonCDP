@@ -84,9 +84,9 @@ Not worth adding for stretching: `stretch time` (the existing Time Stretch and S
 - `pulser pulser 1-2`, `iterline`, `madrid` (set `ochans` 2), `envspeak` — pulsed and syncopated repetition.
 - `texture simple …` — Wishart's main generator; needs a generated note-data file.
 
-## E. Blocked: needs a second sound
+## E. Two-input processes (built 2026-10-26)
 
-`morph morph`, `newmorph`, `formants vocode`, `combine cross`, `specenv`, `distort interact`, `modify convolve`, `fastconv`. Well regarded online (formant transfer, morphing), but the UI has one clip and no file picker. Possible route: a "CDP: Set as Donor" context action that stores a clip's path, which two-input tools then read.
+No longer blocked. The dialog's "Second sound" picker lists the set's audio clips; `CDP: Use as Second Sound` pins the default. Built in the **Cross & Morph** group: `morph bridge`, `morph morph`, `morph glide`, `formants vocode`, `formants put`, `combine mean`, `combine cross/sum/diff/max/interleave`, `envel replace`, `distort interact`, `modify radical 6`, and convolution via `fastconv` (not `modify convolve`). Still open: `newmorph`, `specenv`, `specsphinx`, `spectwin`. Their binaries have never been launched. See `docs/superpowers/specs/2026-10-26-two-input-tools-design.md`.
 
 ## F. Skipped
 

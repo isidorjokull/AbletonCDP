@@ -61,6 +61,11 @@ import {
   type ArpMode, type ArpWave, type GlideType,
 } from "./spectral-more.js";
 import {
+  morphBridge, morph, glide, vocode, formantPut, spectralMean, spectralCombine,
+  envelopeTransfer, wavesetInteract, crossModulate, convolve,
+  type MeanAmp, type CombineMethod,
+} from "./two-input.js";
+import {
   wavesetMultiply, wavesetReform, wavesetAverage, wavesetPitch, wavesetEnvelope,
   type ReformShape, type WsEnvShape,
 } from "./waveset-shape.js";
@@ -89,8 +94,12 @@ export interface CurveTarget {
 export interface ParamSpec {
   key: string;
   label: string;
-  /** `curves` is a composite: it owns its targets' fixed values and curve strings. */
-  type: "slider" | "select" | "check" | "text" | "curves";
+  /**
+   * `curves` is a composite: it owns its targets' fixed values and curve strings.
+   * `second` picks the second sound of a two-input tool; its options come from
+   * the set (the dialog's CLIP.sources), so it has none of its own.
+   */
+  type: "slider" | "select" | "check" | "text" | "curves" | "second";
   targets?: CurveTarget[];
   min?: number;
   max?: number;
@@ -110,7 +119,7 @@ export type ToolParams = Record<string, number | string | boolean>;
 export interface ToolSpec {
   id: string;
   title: string;
-  group: "Time & Pitch" | "Spectral" | "Waveset & Distort" | "Envelope" | "Cut & Shuffle" | "Ambient & Space";
+  group: "Time & Pitch" | "Spectral" | "Waveset & Distort" | "Envelope" | "Cut & Shuffle" | "Ambient & Space" | "Cross & Morph";
   blurb: string;
   /** Longer help shown under the parameters. First line = what it does, second = how to drive it. */
   docs: string;
@@ -1841,10 +1850,221 @@ export const TOOLS: ToolSpec[] = [
     ],
     run: (i, p, td) => stereoSpin(i, { rate: n(p.rate), doppler: n(p.doppler) }, td),
   },
+  // ---- Cross & Morph: two-input processes. `second` is the dialog's pick, prepared by the extension.
+  {
+    id: "cdp.morphBridge", title: "Morph Bridge", group: "Cross & Morph",
+    blurb: "Bridges from this clip's spectrum into a second sound's.",
+    docs: "Interpolates between the frozen spectrum of this clip and that of a second sound over the span you set, so one sound turns into the other. Start and End place the bridge within the shorter of the two. The Frq and Amp sliders say how much of the second sound's frequencies and loudness are present at each end (0 → 1 is a full bridge). Level picks what the loudness follows. Works best on steady, sustained sounds.",
+    params: [
+      { key: "second", label: "Second sound", type: "second", def: "self-rev" },
+      {
+        key: "level", label: "Level follows", type: "select", def: "1",
+        options: [
+          { value: "1", label: "The interpolation" },
+          { value: "2", label: "The quieter of the two" },
+          { value: "3", label: "This clip" },
+          { value: "4", label: "The second sound" },
+          { value: "5", label: "This clip → second sound" },
+          { value: "6", label: "Second sound → this clip" },
+        ],
+      },
+      { key: "start", label: "Start", type: "slider", min: 0, max: 1, step: 0.01, def: 0 },
+      { key: "end", label: "End", type: "slider", min: 0, max: 1, step: 0.01, def: 1 },
+      { key: "frqStart", label: "2nd frq at start", type: "slider", min: 0, max: 1, step: 0.05, def: 0 },
+      { key: "frqEnd", label: "2nd frq at end", type: "slider", min: 0, max: 1, step: 0.05, def: 1 },
+      { key: "ampStart", label: "2nd amp at start", type: "slider", min: 0, max: 1, step: 0.05, def: 0 },
+      { key: "ampEnd", label: "2nd amp at end", type: "slider", min: 0, max: 1, step: 0.05, def: 1 },
+      { key: "swap", label: "Swap roles (bridge from the second sound)", type: "check", def: false },
+    ],
+    run: (i, p, td, ctx) => morphBridge(i, {
+      level: n(p.level), start: n(p.start), end: n(p.end), frqStart: n(p.frqStart), frqEnd: n(p.frqEnd),
+      ampStart: n(p.ampStart), ampEnd: n(p.ampEnd), swap: Boolean(p.swap),
+    }, td, ctx?.second),
+  },
+  {
+    id: "cdp.morph", title: "Morph", group: "Cross & Morph",
+    blurb: "Morphs this clip into a second sound while both keep moving.",
+    docs: "A spectral morph that interpolates window by window while both sounds keep evolving, so it suits noisier or moving material better than Morph Bridge. Amplitude and frequency each morph over their own span, given as fractions of the shorter sound. Their curves set the pace: below 1 the second sound arrives quickly and then settles, above 1 it creeps in and then rushes. Cosine eases both ends.",
+    params: [
+      { key: "second", label: "Second sound", type: "second", def: "self-rev" },
+      {
+        key: "curve", label: "Interpolation", type: "select", def: "exp",
+        options: [{ value: "exp", label: "Curved (by the exponents)" }, { value: "cosine", label: "Cosine (eased)" }],
+      },
+      { key: "ampStart", label: "Amp morph start", type: "slider", min: 0, max: 1, step: 0.01, def: 0.1 },
+      { key: "ampEnd", label: "Amp morph end", type: "slider", min: 0, max: 1, step: 0.01, def: 0.9 },
+      { key: "frqStart", label: "Frq morph start", type: "slider", min: 0, max: 1, step: 0.01, def: 0.1 },
+      { key: "frqEnd", label: "Frq morph end", type: "slider", min: 0, max: 1, step: 0.01, def: 0.9 },
+      { key: "ampExp", label: "Amp curve", type: "slider", min: 0.1, max: 10, step: 0.01, def: 1, log: true },
+      { key: "frqExp", label: "Frq curve", type: "slider", min: 0.1, max: 10, step: 0.01, def: 1, log: true },
+      { key: "swap", label: "Swap roles (morph from the second sound)", type: "check", def: false },
+    ],
+    run: (i, p, td, ctx) => morph(i, {
+      curve: p.curve === "cosine" ? "cosine" : "exp", ampStart: n(p.ampStart), ampEnd: n(p.ampEnd),
+      frqStart: n(p.frqStart), frqEnd: n(p.frqEnd), ampExp: n(p.ampExp), frqExp: n(p.frqExp), swap: Boolean(p.swap),
+    }, td, ctx?.second),
+  },
+  {
+    id: "cdp.glide", title: "Spectral Glide", group: "Cross & Morph",
+    blurb: "One frozen moment of this clip glides into one of a second sound.",
+    docs: "Grabs a single spectral snapshot from this clip and one from the second sound, then glides linearly from the first to the second over the duration you choose. The result is a sustained, slowly turning tone; its length is set by Duration, not by the clip. Short durations give dramatic sweeps, long ones barely perceptible drift.",
+    params: [
+      { key: "second", label: "Second sound", type: "second", def: "self-rev" },
+      { key: "fromAt", label: "Moment in this clip", type: "slider", min: 0, max: 1, step: 0.01, def: 0.3 },
+      { key: "toAt", label: "Moment in second sound", type: "slider", min: 0, max: 1, step: 0.01, def: 0.5 },
+      { key: "duration", label: "Duration", type: "slider", min: 0.2, max: 30, step: 0.1, def: 4, unit: " s", log: true },
+    ],
+    run: (i, p, td, ctx) => glide(i, { fromAt: n(p.fromAt), toAt: n(p.toAt), duration: n(p.duration) }, td, ctx?.second),
+  },
+  {
+    id: "cdp.vocode", title: "Vocoder", group: "Cross & Morph",
+    blurb: "Imposes a second sound's spectral envelope on this clip.",
+    docs: "Cross-synthesis: the evolving formant shape of the second sound (the modulator, e.g. a voice or a drum loop) is stamped onto this clip (the carrier, ideally something rich like a pad or noise). More bands per octave track the modulator more finely. Low and High cut the result to a band; Gain trims the level, which can jump. Swap roles makes this clip the modulator.",
+    params: [
+      { key: "second", label: "Second sound (modulator)", type: "second", def: "self-rev" },
+      { key: "bands", label: "Bands per octave", type: "slider", min: 1, max: 12, step: 1, def: 12 },
+      { key: "lo", label: "Low cut", type: "slider", min: 5, max: 2000, step: 1, def: 200, unit: " Hz", log: true },
+      { key: "hi", label: "High cut", type: "slider", min: 500, max: 22000, step: 10, def: 4000, unit: " Hz", log: true },
+      { key: "gain", label: "Gain", type: "slider", min: 0.05, max: 4, step: 0.05, def: 0.8 },
+      { key: "swap", label: "Swap roles (this clip modulates)", type: "check", def: false },
+    ],
+    run: (i, p, td, ctx) => vocode(i, {
+      bands: n(p.bands), lo: n(p.lo), hi: n(p.hi), gain: n(p.gain), swap: Boolean(p.swap),
+    }, td, ctx?.second),
+  },
+  {
+    id: "cdp.formantPut", title: "Formant Transfer", group: "Cross & Morph",
+    blurb: "Gives this clip the formants (vowel colour) of a second sound.",
+    docs: "Extracts the second sound's evolving formant envelope and puts it on this clip. Replace swaps this clip's own formants out for the new ones (a clean timbre transplant); Impose layers them on top, exaggerating both. Low and High zero the spectrum outside a band; Gain trims the level.",
+    params: [
+      { key: "second", label: "Second sound", type: "second", def: "self-rev" },
+      {
+        key: "mode", label: "Mode", type: "select", def: "replace",
+        options: [{ value: "replace", label: "Replace this clip's formants" }, { value: "impose", label: "Impose on top" }],
+      },
+      { key: "bands", label: "Bands per octave", type: "slider", min: 1, max: 12, step: 1, def: 12 },
+      { key: "lo", label: "Low cut", type: "slider", min: 5, max: 2000, step: 1, def: 100, unit: " Hz", log: true },
+      { key: "hi", label: "High cut", type: "slider", min: 500, max: 22000, step: 10, def: 22000, unit: " Hz", log: true },
+      { key: "gain", label: "Gain", type: "slider", min: 0.05, max: 4, step: 0.05, def: 0.8 },
+      { key: "swap", label: "Swap roles (this clip's formants on the second)", type: "check", def: false },
+    ],
+    run: (i, p, td, ctx) => formantPut(i, {
+      mode: p.mode === "impose" ? "impose" : "replace", bands: n(p.bands), lo: n(p.lo), hi: n(p.hi), gain: n(p.gain), swap: Boolean(p.swap),
+    }, td, ctx?.second),
+  },
+  {
+    id: "cdp.specMean", title: "Spectral Mean", group: "Cross & Morph",
+    blurb: "Averages two spectra, channel by channel — often seriously weird.",
+    docs: "Builds a spectrum halfway between this clip and the second sound. Amplitude chooses where each channel's loudness comes from; Frequencies chooses whether the two are averaged as pitches or as raw frequencies — the latter turns harmonic sounds inharmonic. Low and High limit the channels compared; Zero outside silences the rest.",
+    params: [
+      { key: "second", label: "Second sound", type: "second", def: "self-rev" },
+      {
+        key: "amp", label: "Amplitude", type: "select", def: "mean",
+        options: [
+          { value: "mean", label: "Mean of both" }, { value: "this", label: "From this clip" },
+          { value: "second", label: "From the second sound" }, { value: "max", label: "Louder of the two" },
+        ],
+      },
+      {
+        key: "frq", label: "Frequencies", type: "select", def: "pitch",
+        options: [{ value: "pitch", label: "Mean pitch" }, { value: "frequency", label: "Mean frequency (inharmonic)" }],
+      },
+      { key: "lo", label: "Low limit", type: "slider", min: 5, max: 2000, step: 1, def: 5, unit: " Hz", log: true },
+      { key: "hi", label: "High limit", type: "slider", min: 500, max: 22000, step: 10, def: 22000, unit: " Hz", log: true },
+      { key: "zero", label: "Zero outside the limits", type: "check", def: false },
+    ],
+    run: (i, p, td, ctx) => spectralMean(i, {
+      amp: String(p.amp) as MeanAmp, frq: p.frq === "frequency" ? "frequency" : "pitch", lo: n(p.lo), hi: n(p.hi), zero: Boolean(p.zero),
+    }, td, ctx?.second),
+  },
+  {
+    id: "cdp.specCombine", title: "Spectral Combine", group: "Cross & Morph",
+    blurb: "Cross, add, subtract, max or interleave two spectra.",
+    docs: "Five ways to merge this clip's spectrum with a second sound's. Cross swaps in the second sound's channel amplitudes (a timbre cross-over, Amount = how far). Sum adds and Diff subtracts the second spectrum. Max keeps the louder channel of the two at every moment. Interleave alternates between them every Leaf analysis windows, a fast spectral cut-up.",
+    params: [
+      { key: "second", label: "Second sound", type: "second", def: "self-rev" },
+      {
+        key: "method", label: "Method", type: "select", def: "cross",
+        options: [
+          { value: "cross", label: "Cross — take its amplitudes" }, { value: "sum", label: "Sum — add it" },
+          { value: "diff", label: "Diff — subtract it" }, { value: "max", label: "Max — louder channel wins" },
+          { value: "interleave", label: "Interleave — alternate windows" },
+        ],
+      },
+      {
+        key: "amount", label: "Amount", type: "slider", def: 1, modeKey: "method",
+        modeCfg: {
+          cross: { label: "Amount", min: 0, max: 1, step: 0.05, def: 1 },
+          sum: { label: "Amount", min: 0, max: 1, step: 0.05, def: 1 },
+          diff: { label: "Amount", min: 0, max: 1, step: 0.05, def: 1 },
+          max: { label: "", min: 0, max: 1, step: 1, def: 0, hide: true },
+          interleave: { label: "", min: 0, max: 1, step: 1, def: 0, hide: true },
+        },
+      },
+      {
+        key: "leaf", label: "Leaf", type: "slider", def: 4, unit: " windows", modeKey: "method",
+        modeCfg: {
+          cross: { label: "", min: 1, max: 64, step: 1, def: 4, hide: true },
+          sum: { label: "", min: 1, max: 64, step: 1, def: 4, hide: true },
+          diff: { label: "", min: 1, max: 64, step: 1, def: 4, hide: true },
+          max: { label: "", min: 1, max: 64, step: 1, def: 4, hide: true },
+          interleave: { label: "Leaf", min: 1, max: 64, step: 1, def: 4 },
+        },
+      },
+      { key: "swap", label: "Swap roles", type: "check", def: false },
+    ],
+    run: (i, p, td, ctx) => spectralCombine(i, {
+      method: String(p.method) as CombineMethod, amount: n(p.amount), leaf: n(p.leaf), swap: Boolean(p.swap),
+    }, td, ctx?.second),
+  },
+  {
+    id: "cdp.envReplace", title: "Envelope Transfer", group: "Cross & Morph",
+    blurb: "Replaces this clip's loudness contour with a second sound's.",
+    docs: "Flattens this clip's own envelope and gives it the loudness shape of the second sound instead — make a pad follow a drum loop, or a texture speak with a voice's rhythm. Window is how finely the second sound's loudness is followed: short windows keep transients, long ones a smooth swell.",
+    params: [
+      { key: "second", label: "Second sound", type: "second", def: "self-rev" },
+      { key: "window", label: "Window", type: "slider", min: 5, max: 2000, step: 1, def: 30, unit: " ms", log: true },
+      { key: "swap", label: "Swap roles (this clip's envelope on the second)", type: "check", def: false },
+    ],
+    run: (i, p, td, ctx) => envelopeTransfer(i, { window: n(p.window), swap: Boolean(p.swap) }, td, ctx?.second),
+  },
+  {
+    id: "cdp.wsInteract", title: "Waveset Interact", group: "Cross & Morph",
+    blurb: "Interleaves wavecycles of two sounds, or imposes one's cycle lengths.",
+    docs: "Works on wavecycles (zero-crossing to zero-crossing) of both sounds. Interleave alternates cycles of this clip and the second sound, so both stay audible in a buzzing weave. Impose lengths stretches the second sound's cycles to this clip's cycle lengths — near-total distortion, a burbling, seething mass.",
+    params: [
+      { key: "second", label: "Second sound", type: "second", def: "self-rev" },
+      {
+        key: "mode", label: "Mode", type: "select", def: "interleave",
+        options: [{ value: "interleave", label: "Interleave wavecycles" }, { value: "impose", label: "Impose cycle lengths" }],
+      },
+      { key: "swap", label: "Swap roles", type: "check", def: false },
+    ],
+    run: (i, p, td, ctx) => wavesetInteract(i, { mode: p.mode === "impose" ? "impose" : "interleave", swap: Boolean(p.swap) }, td, ctx?.second),
+  },
+  {
+    id: "cdp.crossMod", title: "Cross Modulate", group: "Cross & Morph",
+    blurb: "Multiplies this clip by a second sound — ring modulation by audio.",
+    docs: "Multiplies the two sounds sample by sample, like Ring Mod but with a whole second sound as the modulator instead of a sine. The result holds only the sum and difference frequencies of the two: metallic, clangorous, and silent wherever either sound is. Output stops when the shorter sound ends.",
+    params: [{ key: "second", label: "Second sound", type: "second", def: "self-rev" }],
+    run: (i, p, td, ctx) => crossModulate(i, p, td, ctx?.second),
+  },
+  {
+    id: "cdp.convolve", title: "Convolve", group: "Cross & Morph",
+    blurb: "Plays this clip through a second sound as if it were a space.",
+    docs: "Convolution: every sample of this clip triggers a copy of the second sound, so a short hit gives a filter, a room recording a reverb, and a long texture a dense smear. IR length caps how much of the second sound is used (longer = longer tail and more blur). Dry mixes the untreated clip back in. The result is normalised to -1 dBFS.",
+    params: [
+      { key: "second", label: "Second sound (impulse)", type: "second", def: "self-rev" },
+      { key: "irLength", label: "IR length", type: "slider", min: 0.01, max: 10, step: 0.01, def: 1, unit: " s", log: true },
+      { key: "dry", label: "Dry", type: "slider", min: 0, max: 1, step: 0.05, def: 0 },
+      { key: "swap", label: "Swap roles (this clip is the impulse)", type: "check", def: false },
+    ],
+    run: (i, p, td, ctx) => convolve(i, { irLength: n(p.irLength), dry: n(p.dry), swap: Boolean(p.swap) }, td, ctx?.second),
+  },
 ];
 
 export const GROUP_ORDER: ToolSpec["group"][] = [
-  "Time & Pitch", "Spectral", "Waveset & Distort", "Cut & Shuffle", "Envelope", "Ambient & Space",
+  "Time & Pitch", "Spectral", "Waveset & Distort", "Cut & Shuffle", "Envelope", "Ambient & Space", "Cross & Morph",
 ];
 
 export function toolById(id: string): ToolSpec | undefined {

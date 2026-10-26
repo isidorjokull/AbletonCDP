@@ -183,6 +183,21 @@ function buildParams(container,spec,init){
       row.appendChild(x);
     }else if(p.type==='curves'){
       buildCurves(row,p,state,init);
+    }else if(p.type==='second'){
+      // Options come from the set (CLIP.sources); a remembered pick that is no
+      // longer listed falls back to the extension's default choice.
+      var src=(typeof CLIP!=='undefined'&&CLIP&&CLIP.sources)||{def:'self-rev',
+        options:[{value:'self',label:'This clip'},{value:'self-rev',label:'This clip, reversed'}]};
+      var listed=function(x){return src.options.some(function(o){return o.value===String(x)})};
+      v=(init&&init[p.key]!==undefined&&listed(init[p.key]))?init[p.key]:src.def;
+      state[p.key]=v;
+      row.innerHTML='<div class="top"><span class="lbl"></span></div>';
+      row.querySelector('.lbl').textContent=p.label;
+      var ss=document.createElement('select');ss.setAttribute('aria-label',p.label);
+      src.options.forEach(function(o){var op=document.createElement('option');op.value=o.value;op.textContent=o.label;ss.appendChild(op)});
+      ss.value=String(v);
+      ss.addEventListener('change',function(){state[p.key]=ss.value});
+      row.appendChild(ss);
     }
     container.appendChild(row);
   });
@@ -241,7 +256,7 @@ function embed(v: unknown): string {
 /* ------------------------------------------------------------------ */
 
 function rowHeight(p: ParamSpec): number {
-  return p.type === "check" ? 28 : p.type === "slider" ? 47 : p.type === "curves" ? 330 : 50;
+  return p.type === "check" ? 28 : p.type === "slider" ? 47 : p.type === "curves" ? 330 : 50; // select, text, second: 50
 }
 
 function docsHeight(spec: ToolSpec): number {

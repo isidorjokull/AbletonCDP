@@ -8,6 +8,8 @@ export type EnvSync = "beat" | "time" | "random" | "bounce";
 /** Extra data the extension injects that the dialog can't know (e.g. tempo). */
 export interface RunCtx {
   tempo: number;
+  /** Two-input tools: the prepared WAV of the dialog's "Second sound" pick. */
+  second?: string | undefined;
 }
 
 export interface ImposeEnvelopeParams {

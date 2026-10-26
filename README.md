@@ -8,7 +8,7 @@ Built on the **Ableton Extensions SDK** (1.0.0-beta.1). The extension shells out
 
 ## Features
 
-- **102 CDP effects** grouped into a clip context menu, plus an **All Tools** rack that opens a grid of every effect and lets you **chain** processing without leaving the panel.
+- **113 CDP effects** grouped into a clip context menu, plus an **All Tools** rack that opens a grid of every effect and lets you **chain** processing without leaving the panel.
 - **Non-destructive by default.** The processed audio replaces the clip in place; the original is moved to a `CDP Originals` take lane. A fresh lane is created whenever the previous backup slot is occupied, so backups never overwrite each other. The clip's colour is preserved.
 - **Region-aware.** Only the portion of the file the clip actually plays is processed, not the whole underlying sample.
 - **Stereo-safe.** Stereo-native CDP tools run directly; the rest are split to mono, processed per channel, and re-interleaved.
@@ -26,8 +26,11 @@ Built on the **Ableton Extensions SDK** (1.0.0-beta.1). The extension shells out
 | **Cut & Shuffle** | Bounce · Scramble · Constrict · Zigzag · Iteration Freeze · Shred · Scrub · Cantor · Iterate · Fugu · Advancing Loop · Doublets · Grain Reorder · Cascade · Sorter · Splinter |
 | **Envelope** | **Envelope Trigger** · Envelope Warp · Tremolo · Swell · Peak Chop · Shudder |
 | **Ambient & Space** | Reverb · Spectral Drunk · Spectral Spread · **Glisten** · **Hover** · Delay · Resonant Delay · Phaser · Sweep Filter · Spectral Weave · Spectral Hold · Drunk Walk · Self-similar · Tune to Chord · Hover 2 · Room Reverb · Tap Delay · Stereo Spin |
+| **Cross & Morph** | **Morph Bridge** · **Morph** · Spectral Glide · **Vocoder** · Formant Transfer · Spectral Mean · Spectral Combine · Envelope Transfer · Waveset Interact · Cross Modulate · Convolve |
 
 **Envelope Trigger** is a generative gate: it synthesises its own amplitude envelope and re-triggers the clip in a rhythm you design — **Beat sync** (locked to Live's tempo), **Time** (fixed seconds), **Random** (scattered hits), or **Bounce** (bouncing-ball spacing that accelerates or decelerates). Attack, Release, and Floor shape each hit. No donor file required.
+
+**Cross & Morph** effects combine the clip with a **second sound**, picked from a list of the set's other audio clips (or the clip itself, straight or reversed) in the effect's dialog. Right-click a clip → `CDP: Use as Second Sound` to make it the default pick (marked ★). Arrangement clips are bounced as heard, and the second sound is matched to the clip's sample rate and channel count automatically. **Swap roles** runs the process the other way round.
 
 ---
 
@@ -55,7 +58,7 @@ Configuration:
 - **CDP binary directory** — auto-detected; override with the `CDP_BIN_DIR` environment variable.
 - **Extension Host path** — set `EXTENSION_HOST_PATH` in `.env` (points at Live's bundled `ExtensionHost`).
 
-When the host starts you should see `activated: 102 tools + Rack + Repeat Last registered` in its log. In Live, right-click any audio clip → the **CDP** actions appear in the context menu.
+When the host starts you should see `activated: 113 tools + Rack + Repeat Last + Use as Second Sound registered` in its log. In Live, right-click any audio clip → the **CDP** actions appear in the context menu.
 
 ---
 

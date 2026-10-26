@@ -41,14 +41,15 @@ export async function runCdp(binary: string, args: string[], opts: { cwd?: strin
   });
 }
 
-async function runFfmpeg(args: string[]): Promise<void> {
+/** Runs ffmpeg; resolves with its stderr, where analysis filters (volumedetect) report. */
+async function runFfmpeg(args: string[]): Promise<string> {
   return new Promise((resolve, reject) => {
     const proc = spawn(getFfmpegPath(), args);
     let stderr = "";
     proc.stderr.on("data", (d: Buffer) => (stderr += d.toString()));
     proc.on("close", (code) => {
       if (code !== 0) reject(new Error(`ffmpeg exited ${code}:\n${stderr}`));
-      else resolve();
+      else resolve(stderr);
     });
     proc.on("error", (err) =>
       reject(new Error(`Failed to spawn ffmpeg: ${err.message}`))
@@ -235,6 +236,149 @@ export async function runWithStereoSupport(
     await runCdp("interlx", [outputPath, lOut, rOut]);
   } finally {
     cleanup(lIn, rIn, lOut, rOut);
+  }
+}
+
+/** What CDP needs to match between the inputs of a two-input process. */
+export interface AudioFormat { sampleRate: number; channels: number; codec: string }
+
+/** Sample rate, channel count and PCM codec of a file's first audio stream. */
+export async function getAudioFormat(filePath: string): Promise<AudioFormat> {
+  const out = await runProbe([
+    "-v", "error",
+    "-select_streams", "a:0",
+    "-show_entries", "stream=sample_rate,channels,codec_name",
+    "-of", "default=noprint_wrappers=1",
+    filePath,
+  ]);
+  const field = (k: string) => new RegExp(`^${k}=(.*)$`, "m").exec(out)?.[1]?.trim() ?? "";
+  const sr = parseInt(field("sample_rate"), 10);
+  const ch = parseInt(field("channels"), 10);
+  const codec = field("codec_name");
+  return {
+    sampleRate: isFinite(sr) && sr > 0 ? sr : 44100,
+    channels: isFinite(ch) && ch > 0 ? ch : 1,
+    codec: /^pcm_/.test(codec) ? codec : "pcm_s24le",
+  };
+}
+
+const sameFormat = (a: AudioFormat, b: AudioFormat) =>
+  a.sampleRate === b.sampleRate && a.channels === b.channels && a.codec === b.codec;
+
+/** `filePath` converted to `fmt` (a WAV in tempDir), or `filePath` itself if it already is. */
+export async function conformToFormat(filePath: string, fmt: AudioFormat, tempDir: string): Promise<string> {
+  if (sameFormat(await getAudioFormat(filePath), fmt)) return filePath;
+  const out = join(tempDir, `${basename(filePath, extname(filePath))}_conf_${Date.now()}_${Math.random().toString(36).slice(2, 6)}.wav`);
+  await runFfmpeg([
+    "-y", "-i", filePath,
+    "-ar", String(fmt.sampleRate), "-ac", String(fmt.channels), "-c:a", fmt.codec, out,
+  ]);
+  return out;
+}
+
+/**
+ * `filePath` in `refPath`'s sample rate, channel count and sample type. CDP
+ * refuses inputs that differ in any of them — pvoc even records the original
+ * sample type, so a 24-bit copy of a 16-bit sound fails "Incompatible
+ * original-sample-type".
+ */
+export async function conformTo(filePath: string, refPath: string, tempDir: string): Promise<string> {
+  return conformToFormat(filePath, await getAudioFormat(refPath), tempDir);
+}
+
+/**
+ * Both sounds of a pair in one format: the first's sample rate and type, and
+ * the wider channel count (a mono partner becomes dual-mono rather than a
+ * stereo clip being downmixed). Returns the paths to use; either may be the
+ * original file.
+ */
+export async function conformPair(a: string, b: string, tempDir: string): Promise<[string, string]> {
+  const [fa, fb] = await Promise.all([getAudioFormat(a), getAudioFormat(b)]);
+  const fmt = { ...fa, channels: Math.max(fa.channels, fb.channels) };
+  return [await conformToFormat(a, fmt, tempDir), await conformToFormat(b, fmt, tempDir)];
+}
+
+/** A reversed copy of an audio file, in tempDir. */
+export async function reverseAudio(filePath: string, tempDir: string): Promise<string> {
+  const out = join(tempDir, `${basename(filePath, extname(filePath))}_rev_${Date.now()}.wav`);
+  await runFfmpeg(["-y", "-i", filePath, "-af", "areverse", "-c:a", "pcm_s24le", out]);
+  return out;
+}
+
+/** The first `seconds` of a file (whole file if shorter), in tempDir. */
+export async function trimAudio(filePath: string, seconds: number, tempDir: string): Promise<string> {
+  const out = join(tempDir, `${basename(filePath, extname(filePath))}_trim_${Date.now()}.wav`);
+  await runFfmpeg(["-y", "-i", filePath, "-t", String(seconds), "-c:a", "pcm_s24le", out]);
+  return out;
+}
+
+/** Scales `inputPath` so its peak sits at `targetDb` dBFS; writes 24-bit WAV to outputPath. */
+export async function normalizePeak(inputPath: string, outputPath: string, targetDb: number): Promise<void> {
+  const report = await runFfmpeg(["-i", inputPath, "-af", "volumedetect", "-f", "null", "-"]);
+  const m = /max_volume:\s*(-?[\d.]+|-inf) dB/.exec(report);
+  const peak = m && m[1] !== "-inf" ? Number(m[1]) : NaN;
+  const gain = isFinite(peak) ? targetDb - peak : 0; // silence stays silence
+  await runFfmpeg(["-y", "-i", inputPath, "-af", `volume=${gain.toFixed(2)}dB`, "-c:a", "pcm_s24le", outputPath]);
+}
+
+/**
+ * Runs a mono two-input processor on any pair, conformed with conformPair;
+ * stereo pairs are split and processed L with L and R with R, then merged with
+ * interlx, as runWithStereoSupport does.
+ */
+export async function runPairWithStereoSupport(
+  first: string,
+  second: string,
+  outputPath: string,
+  tempDir: string,
+  processor: (monoA: string, monoB: string, monoOut: string) => Promise<void>
+): Promise<void> {
+  const [a, b] = await conformPair(first, second, tempDir);
+  try {
+    await runPair(a, b, outputPath, tempDir, processor);
+  } finally {
+    if (a !== first) cleanup(a);
+    if (b !== second) cleanup(b);
+  }
+}
+
+/** runPairWithStereoSupport once both sounds share one format. */
+async function runPair(
+  first: string,
+  b: string,
+  outputPath: string,
+  tempDir: string,
+  processor: (monoA: string, monoB: string, monoOut: string) => Promise<void>
+): Promise<void> {
+  const { channels, codec } = await getAudioFormat(first);
+  if (channels === 1) {
+    await processor(first, b, outputPath);
+    return;
+  }
+  if (channels !== 2) throw new Error(`Only mono and stereo clips are supported (this one has ${channels} channels).`);
+
+  const ts = Date.now();
+  const split = (f: string, tag: string) => {
+    const l = join(tempDir, `${tag}_L_${ts}.wav`);
+    const r = join(tempDir, `${tag}_R_${ts}.wav`);
+    return { l, r, run: () => runFfmpeg([
+      "-y", "-i", f,
+      "-filter_complex", "[0:a]channelsplit=channel_layout=stereo[L][R]",
+      "-map", "[L]", "-c:a", codec, l, "-map", "[R]", "-c:a", codec, r, // keep the sample type both halves share
+    ]) };
+  };
+  const sa = split(first, "pairA");
+  const sb = split(b, "pairB");
+  const lOut = join(tempDir, `pair_Lout_${ts}.wav`);
+  const rOut = join(tempDir, `pair_Rout_${ts}.wav`);
+  try {
+    await sa.run();
+    await sb.run();
+    await processor(sa.l, sb.l, lOut);
+    await processor(sa.r, sb.r, rOut);
+    await runCdp("interlx", [outputPath, lOut, rOut]);
+  } finally {
+    cleanup(sa.l, sa.r, sb.l, sb.r, lOut, rOut);
   }
 }
 

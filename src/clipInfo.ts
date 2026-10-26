@@ -3,7 +3,15 @@
 // for a waveform behind the curve. Display-only — a run always measures its
 // real input.
 
-export interface DialogClip { seconds: number; tempo: number; peaks: number[] | null }
+import type { SecondSoundList } from "./secondSound.js";
+
+export interface DialogClip {
+  seconds: number;
+  tempo: number;
+  peaks: number[] | null;
+  /** Two-input tools: the "Second sound" choices and default (see secondSound.ts). */
+  sources?: SecondSoundList | undefined;
+}
 
 /** The clip fields that decide its length; `bounced` = an arrangement clip processClip renders in place. */
 export interface ClipTiming {

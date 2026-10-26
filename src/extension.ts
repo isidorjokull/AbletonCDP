@@ -10,8 +10,9 @@ import {
 import { tmpdir } from "os";
 import { readFileSync, writeFileSync, existsSync, readdirSync, unlinkSync } from "fs";
 import { join } from "path";
-import { ensureWavInput, extractRegion, getPeaks } from "./runner.js";
+import { ensureWavInput, extractRegion, getPeaks, reverseAudio } from "./runner.js";
 import { dialogClip, type ClipTiming, type DialogClip } from "./clipInfo.js";
+import { listSecondSounds, resolveSecondSound, SELF, SELF_REV, type TrackLike } from "./secondSound.js";
 import { TOOLS, toolById, type ToolSpec, type ToolParams } from "./tools/registry.js";
 import {
   renderToolDialog,
@@ -30,13 +31,13 @@ function dataUrl(html: string): string {
   return `data:text/html,${encodeURIComponent(html)}`;
 }
 
-function errorDialogUrl(title: string, message: string): string {
+function errorDialogUrl(title: string, message: string, titleColor = "hsl(4,80%,66%)"): string {
   const esc = message.replace(/</g, "&lt;").replace(/>/g, "&gt;");
   const html = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><style>
 *{box-sizing:border-box;margin:0}
 html{background:hsl(26,5%,17%);color:hsl(30,9%,80%);font-family:"AbletonSansSmall",-apple-system,sans-serif;font-size:11.5px;height:100%}
 body{height:100%;display:flex;flex-direction:column;padding:14px;gap:8px}
-.t{color:hsl(4,80%,66%);font-size:11px;letter-spacing:.1em;text-transform:uppercase}
+.t{color:${titleColor};font-size:11px;letter-spacing:.1em;text-transform:uppercase}
 .m{color:hsl(27,6%,60%);font-size:10.5px;line-height:1.5;overflow:auto;flex:1;white-space:pre-wrap}
 button{font:inherit;align-self:flex-end;background:hsl(26,8%,11%);color:hsl(30,9%,80%);
 border:1px solid hsl(26,7%,26%);border-radius:4px;height:26px;padding:0 14px;cursor:pointer}
@@ -45,6 +46,9 @@ border:1px solid hsl(26,7%,26%);border-radius:4px;height:26px;padding:0 14px;cur
 </body></html>`;
   return dataUrl(html);
 }
+
+/** errorDialogUrl's layout for a plain confirmation, with the accent colour instead of red. */
+const noticeDialogUrl = (title: string, message: string) => errorDialogUrl(title, message, "hsl(28,100%,62%)");
 
 const ORIGINALS_LANE = "CDP Originals";
 
@@ -233,6 +237,55 @@ async function placeResult(
   return null;
 }
 
+/**
+ * The audio of a clip as heard, as a WAV in tempDir. Arrangement clips are
+ * bounced in place: Live renders the track over exactly the clip's span, so
+ * warping, clip gain, fades and any cut/trimmed region are baked in. Rebuilding
+ * that from the source file (markers in mixed units, warp markers ignored) is
+ * what went wrong on small pieces cut from long clips. The render only hears
+ * the track's main lane, so session and take-lane clips keep the source-file
+ * region extract.
+ */
+async function clipAudio(context: Ctx, clip: AudioClip<"1.0.0">, tempDir: string, tempo: number): Promise<string> {
+  const parent = clip.parent;
+  if (parent instanceof AudioTrack) {
+    const rendered = await step("bounce", () =>
+      context.resources.renderPreFxAudio(parent, clip.startTime, clip.endTime)
+    );
+    return ensureWavInput(rendered, tempDir); // follows Record File Type: may be AIFF
+  }
+  // LOM quirk: unwarped clips report start/endMarker in SECONDS, warped in beats.
+  const toSec = (marker: number) => (clip.warping ? (marker * 60) / tempo : marker);
+  const wav = await ensureWavInput(clip.filePath, tempDir);
+  return extractRegion(wav, toSec(clip.startMarker), toSec(clip.endMarker), tempDir);
+}
+
+/** Tools that combine the clip with a second sound picked in their dialog. */
+const hasSecond = (spec: ToolSpec) => spec.params.some((p) => p.type === "second");
+
+/** The clip pinned with "CDP: Use as Second Sound" (its handle id); the pickers' default. */
+let pinnedSecond: bigint | null = null;
+
+const isAudioClip = (c: unknown) => c instanceof AudioClip;
+
+/** The set's tracks in the shape secondSound.ts reads. */
+const songTracks = (context: Ctx) => context.application.song.tracks as unknown as TrackLike[];
+
+/**
+ * The audio of a dialog's "Second sound" pick: the clip itself (`input`),
+ * reversed, or another clip of the set prepared exactly like the main input.
+ */
+async function secondAudio(context: Ctx, value: string, input: string, tempDir: string, tempo: number): Promise<string> {
+  const picked = resolveSecondSound(songTracks(context), value, isAudioClip);
+  if (picked === SELF) return input;
+  if (picked === SELF_REV) return reverseAudio(input, tempDir);
+  if (!picked) {
+    throw new Error("The clip chosen as the second sound is no longer there. Open the effect's dialog and pick it again.");
+  }
+  const clip = context.getObjectFromHandle(picked.handle as Handle, AudioClip);
+  return clipAudio(context, clip, tempDir, tempo);
+}
+
 /** Runs one tool against a clip and replaces it; returns the new clip. */
 async function processClip(
   context: Ctx,
@@ -243,13 +296,7 @@ async function processClip(
 ): Promise<AudioClip<"1.0.0"> | null> {
   const tempo = context.application.song.tempo;
   const parent = clip.parent;
-  // Arrangement clips are bounced in place first: Live renders the track over
-  // exactly the clip's span, so warping, clip gain, fades and any cut/trimmed
-  // region are baked in as heard. Rebuilding that from the source file (markers
-  // in mixed units, warp markers ignored) is what went wrong on small pieces cut
-  // from long clips. The render only hears the track's main lane, so session
-  // and take-lane clips keep the source-file region extract.
-  const bounced = parent instanceof AudioTrack;
+  const bounced = parent instanceof AudioTrack; // see clipAudio
 
   // Only clean a directory Live gave this extension; if tempDir fell back to the
   // system tmpdir, a before/after diff could delete other programs' files.
@@ -262,21 +309,15 @@ async function processClip(
       `CDP: ${spec.title}…`,
       {},
       async (update) => {
-        let inputPath: string;
-        if (parent instanceof AudioTrack) {
-          await update("Bouncing clip…", 10);
-          const rendered = await step("bounce", () =>
-            context.resources.renderPreFxAudio(parent, clip.startTime, clip.endTime)
-          );
-          inputPath = await ensureWavInput(rendered, tempDir); // follows Record File Type: may be AIFF
-        } else {
-          // LOM quirk: unwarped clips report start/endMarker in SECONDS, warped in beats.
-          const toSec = (marker: number) => (clip.warping ? (marker * 60) / tempo : marker);
-          inputPath = await ensureWavInput(clip.filePath, tempDir);
-          inputPath = await extractRegion(inputPath, toSec(clip.startMarker), toSec(clip.endMarker), tempDir);
+        await update(bounced ? "Bouncing clip…" : "Reading clip…", 10);
+        const inputPath = await clipAudio(context, clip, tempDir, tempo);
+        let second: string | undefined;
+        if (hasSecond(spec)) {
+          await update("Preparing second sound…", 25);
+          second = await step("second sound", () => secondAudio(context, String(params.second ?? ""), inputPath, tempDir, tempo));
         }
         await update(`${spec.title}…`, 40);
-        return step("CDP", () => spec.run(inputPath, params, tempDir, { tempo }));
+        return step("CDP", () => spec.run(inputPath, params, tempDir, { tempo, second }));
       }
     )) as string;
     // The project copy is the only one the set uses from here on.
@@ -295,14 +336,28 @@ async function dialogClipFor(context: Ctx, clip: AudioClip<"1.0.0">): Promise<Di
       bounced: clip.parent instanceof AudioTrack, warping: clip.warping,
       startTime: clip.startTime, endTime: clip.endTime, startMarker: clip.startMarker, endMarker: clip.endMarker,
     };
-    return await dialogClip(timing, tempo, clip.filePath, getPeaks);
+    const info = await dialogClip(timing, tempo, clip.filePath, getPeaks);
+    return { ...info, sources: secondSoundsFor(context, clip) };
   } catch {
-    return { seconds: NaN, tempo, peaks: null };
+    return { seconds: NaN, tempo, peaks: null, sources: secondSoundsFor(context, clip) };
   }
 }
 
-/** Tools with a curve editor render their dialog per open, so it knows the clip. */
-const hasCurves = (spec: ToolSpec) => spec.params.some((p) => p.type === "curves");
+/** The "Second sound" choices for a dialog on `clip`; undefined (self only) if the set can't be read. */
+function secondSoundsFor(context: Ctx, clip: AudioClip<"1.0.0">) {
+  try {
+    return listSecondSounds(songTracks(context), clip, isAudioClip, pinnedSecond);
+  } catch (err: unknown) {
+    console.warn(`[cdp-for-live] could not list second sounds: ${err instanceof Error ? err.message : String(err)}`);
+    return undefined;
+  }
+}
+
+/**
+ * Tools with a curve editor or a second-sound picker render their dialog per
+ * open, so it knows the clip and the set.
+ */
+const perOpen = (spec: ToolSpec) => hasSecond(spec) || spec.params.some((p) => p.type === "curves");
 
 function registerTool(context: Ctx, tempDir: string, spec: ToolSpec): void {
   const html = renderToolDialog(spec);
@@ -312,7 +367,7 @@ function registerTool(context: Ctx, tempDir: string, spec: ToolSpec): void {
     void (async (handle: Handle) => {
       try {
         const clip = context.getObjectFromHandle(handle, AudioClip);
-        const page = hasCurves(spec) ? renderToolDialog(spec, null, await dialogClipFor(context, clip)) : html;
+        const page = perOpen(spec) ? renderToolDialog(spec, null, await dialogClipFor(context, clip)) : html;
         const result = await context.ui.showModalDialog(dataUrl(page), w, h);
         if (!result) return;
         const params = JSON.parse(result) as ToolParams | null;
@@ -436,6 +491,29 @@ function registerRack(context: Ctx, tempDir: string): void {
   });
 }
 
+/**
+ * "CDP: Use as Second Sound": pins a clip as the default "Second sound" of every
+ * two-input tool (marked ★ in their pickers) until another is pinned. Kept in
+ * memory only — handle ids are not stable across Live sessions.
+ */
+function registerUseAsSecond(context: Ctx): void {
+  context.ui.registerContextMenuAction("AudioClip", "CDP: Use as Second Sound", "cdp.useAsSecond");
+  context.commands.registerCommand("cdp.useAsSecond", (arg: unknown) => {
+    void (async (handle: Handle) => {
+      try {
+        const clip = context.getObjectFromHandle(handle, AudioClip);
+        pinnedSecond = clip.handle.id;
+        console.log(`[cdp-for-live] second sound pinned: "${clip.name}"`);
+        await context.ui.showModalDialog(noticeDialogUrl("Second sound set",
+          `"${clip.name}" is now the default second sound for the Cross & Morph effects (marked ★ in their Second sound list).`), 400, 170);
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error("[cdp-for-live] Use as Second Sound error:", msg);
+      }
+    })(arg as Handle);
+  });
+}
+
 const NOTHING_YET = "Run any CDP effect once (from a tool menu or the Rack), then Repeat Last will re-apply it here with a single click — ideal for a keyboard shortcut or Stream Deck key.";
 
 /**
@@ -476,7 +554,7 @@ function registerRepeatLast(context: Ctx, tempDir: string): void {
           return;
         }
         const [w, h] = toolDialogSize(spec);
-        const dclip = hasCurves(spec) ? await dialogClipFor(context, clip) : null;
+        const dclip = perOpen(spec) ? await dialogClipFor(context, clip) : null;
         const result = await context.ui.showModalDialog(
           dataUrl(renderToolDialog(spec, rackMemory.params, dclip)), w, h
         );
@@ -504,18 +582,19 @@ export function activate(activation: ActivationContext) {
 
   registerRack(context, tempDir);
   registerRepeatLast(context, tempDir);
+  registerUseAsSecond(context);
   for (const spec of TOOLS) registerTool(context, tempDir, spec);
 
   startCommandEndpoint(context);
 
-  console.log(`[cdp-for-live] activated: ${TOOLS.length} tools + Rack + Repeat Last registered`);
+  console.log(`[cdp-for-live] activated: ${TOOLS.length} tools + Rack + Repeat Last + Use as Second Sound registered`);
 }
 
 /**
- * Command ids reachable over the endpoint: every tool, plus the Rack and the
- * two Repeat Last variants. Derived from TOOLS so new tools are exposed
- * automatically; the three fixed ids mirror the literals in registerRack and
- * registerRepeatLast.
+ * Command ids reachable over the endpoint: every tool, plus the Rack, the two
+ * Repeat Last variants and Use as Second Sound. Derived from TOOLS so new tools
+ * are exposed automatically; the fixed ids mirror the literals in registerRack,
+ * registerRepeatLast and registerUseAsSecond.
  */
 function registeredCommandIds(): Set<string> {
   return new Set<string>([
@@ -523,6 +602,7 @@ function registeredCommandIds(): Set<string> {
     "cdp.rack",
     "cdp.repeatLast",
     "cdp.repeatLastDialog",
+    "cdp.useAsSecond",
   ]);
 }
 
