@@ -93,3 +93,10 @@ export async function scrub(
   ]);
   return outputPath;
 }
+
+/** `modify radical 1 in out` — plays the clip backwards. */
+export async function reverse(inputPath: string, _params: unknown, outputDir?: string): Promise<string> {
+  const outputPath = buildOutputPath(inputPath, "reverse", outputDir);
+  await runCdp("modify", ["radical", "1", inputPath, outputPath]);
+  return outputPath;
+}

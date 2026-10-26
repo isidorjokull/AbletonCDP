@@ -418,3 +418,65 @@ export async function spectralChord(i: string, p: SpectralChordParams, td: strin
     if (existsSync(dataPath)) unlinkSync(dataPath);
   }
 }
+
+export interface OctaveFoldParams {
+  lo: number;     // Hz: bottom of the band everything is folded into
+  hi: number;     // Hz: top of it
+  fuller: boolean; // -x
+}
+
+/** `focus fold in out lofrq hifrq [-x]` — octave-transposes every component into lo–hi. */
+export function octaveFold(i: string, p: OctaveFoldParams, td: string, od?: string) {
+  const lo = clamp(p.lo, 5, 20000);
+  const hi = clamp(Math.max(p.hi, lo * 1.5), lo + 1, 22000);
+  const tail = [String(Math.round(lo)), String(Math.round(hi))];
+  if (p.fuller) tail.push("-x");
+  return spectralOp(i, "octfold", td, od, "focus", ["fold"], tail);
+}
+
+export interface SpectralFocusParams {
+  peaks: number;     // number of spectral peaks to focus on (1–16)
+  bandwidth: number; // octaves, 1/12–10
+  lo: number;        // Hz: search range
+  hi: number;
+  stable: boolean;   // -s9: keep only peaks that hold over ~9 windows
+}
+
+/** `focus focus in out -p12 pk bw [-bbt] [-ttp] [-s9]` — energy pulled onto the strongest peaks. */
+export function spectralFocus(i: string, p: SpectralFocusParams, td: string, od?: string) {
+  const lo = clamp(p.lo, 5, 20000);
+  const hi = clamp(p.hi, lo + 10, 22000);
+  const tail = ["-p12", String(Math.round(clamp(p.peaks, 1, 16))), String(clamp(p.bandwidth, 0.084, 10)), `-b${Math.round(lo)}`, `-t${Math.round(hi)}`];
+  if (p.stable) tail.push("-s9");
+  return spectralOp(i, "specfocus", td, od, "focus", ["focus"], tail);
+}
+
+export type SpecFilterType = "hp" | "lp" | "bp" | "notch";
+
+export interface SpectralFilterParams {
+  type: SpecFilterType;
+  frq: number;      // cutoff (hp/lp) or bottom of the band (bp/notch)
+  frq2: number;     // top of the band (bp/notch)
+  q: number;        // width of the filter skirts in Hz
+  normalise: boolean;
+  gain: number;     // 1 = unity; any other value uses the "with gain" modes (no normalising)
+}
+
+/**
+ * `hilite filter <mode> in out frq1 [frq2] Q [gain]`: modes 1/2 HP, 3/4 LP, 7/8 BP, 9/10 notch
+ * (even = normalised), 5 HP / 6 LP / 11 BP / 12 notch with gain.
+ */
+export function spectralFilter(i: string, p: SpectralFilterParams, td: string, od?: string) {
+  const band = p.type === "bp" || p.type === "notch";
+  const withGain = Math.abs(p.gain - 1) > 0.001;
+  const base = { hp: 1, lp: 3, bp: 7, notch: 9 }[p.type] ?? 1;
+  const gainMode = { hp: 5, lp: 6, bp: 11, notch: 12 }[p.type] ?? 5;
+  const mode = withGain ? gainMode : base + (p.normalise ? 1 : 0);
+  const f1 = clamp(band ? Math.min(p.frq, p.frq2) : p.frq, 10, 21000);
+  const f2 = clamp(Math.max(p.frq, p.frq2), f1 + 1, 22000);
+  const tail = [String(Math.round(f1))];
+  if (band) tail.push(String(Math.round(f2)));
+  tail.push(String(Math.round(clamp(p.q, 1, 22000))));
+  if (withGain) tail.push(String(clamp(p.gain, 0.05, 20)));
+  return spectralOp(i, "specfilt", td, od, "hilite", ["filter", String(mode)], tail);
+}

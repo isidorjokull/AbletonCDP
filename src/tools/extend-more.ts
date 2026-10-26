@@ -37,6 +37,10 @@ export interface DrunkParams {
   step: number;        // max jump between segments, seconds
   segment: number;     // segment length, seconds
   overlap: number;     // 0–0.99 overlap between segments
+  /** extend drunk 2: between drunk stretches the clip plays on soberly from where the walk is. */
+  sober?: boolean;
+  minDrunk?: number;   // clock ticks of walking between sober plays (min / max)
+  maxDrunk?: number;
 }
 
 /** `extend drunk 1` — splices segments read from a random walk through the clip. */
@@ -45,13 +49,17 @@ export async function drunkWalk(inputPath: string, params: DrunkParams, outputDi
   const dur = await getAudioDuration(inputPath);
   const ambitus = Math.max(0.01, (dur * clamp(params.range, 0.01, 1)) / 2);
   // extend drunk 1 infile outfile outdur locus ambitus step clock [-cclokrand] [-ooverlap]
+  // extend drunk 2 … clock mindrnk maxdrnk [-cclokrand] [-ooverlap]
+  const lo = Math.round(clamp(params.minDrunk ?? 10, 1, 1000));
+  const hi = Math.round(clamp(params.maxDrunk ?? 30, lo, 1000));
   await runCdp("extend", [
-    "drunk", "1", inputPath, outputPath,
+    "drunk", params.sober ? "2" : "1", inputPath, outputPath,
     String(dur * Math.max(0.25, params.lengthRatio)),
     String(dur * clamp(params.position, 0, 1)),
     String(ambitus),
     String(clamp(params.step, 0.003, ambitus)),
     String(Math.max(0.04, params.segment)), // must exceed 2 × the 15ms splice
+    ...(params.sober ? [String(lo), String(hi)] : []),
     "-c0.3",
     `-o${clamp(params.overlap, 0, 0.99)}`,
   ]);
@@ -81,6 +89,10 @@ export interface AdvancingLoopParams {
   length: number; // loop length in ms
   step: number;   // how far the loop start advances each repeat, in ms
   scatter: number; // ms of irregularity in the advance
+  /** When looping stops: when the clip runs out (1), after `outLength` × the clip (2), or after `repeats` loops (3). */
+  ends?: "exhaust" | "duration" | "count";
+  outLength?: number;
+  repeats?: number;
 }
 
 /** `extend loop 1` — a loop window that creeps through the clip until it runs out. */
@@ -88,10 +100,21 @@ export async function advancingLoop(inputPath: string, params: AdvancingLoopPara
   const outputPath = buildOutputPath(inputPath, "advloop", outputDir);
   const dur = await getAudioDuration(inputPath);
   const len = clamp(params.length, 20, dur * 500); // at most half the clip
-  // output ≈ clip length × len/step, so cap the stretch at 20×
-  const step = Math.max(params.step, len / 20, 1);
-  // extend loop 1 infile outfile start len step [-wsplen] [-sscat]
-  const args = ["loop", "1", inputPath, outputPath, "0", String(len), String(step), `-w${Math.min(25, len / 4)}`];
+  const splice = `-w${Math.min(25, len / 4)}`;
+  let args: string[];
+  if (params.ends === "duration" || params.ends === "count") {
+    // extend loop 2 infile outfile dur start len [-lstep] … | extend loop 3 infile outfile cnt start len [-lstep] …
+    // Output length is set directly, so the advance may be tiny (a near-stuck loop).
+    const amount = params.ends === "duration"
+      ? String(dur * clamp(params.outLength ?? 4, 0.25, 40))
+      : String(Math.round(clamp(params.repeats ?? 16, 2, 1000)));
+    args = ["loop", params.ends === "duration" ? "2" : "3", inputPath, outputPath, amount, "0", String(len), `-l${Math.max(0, params.step)}`, splice];
+  } else {
+    // output ≈ clip length × len/step, so cap the stretch at 20×
+    const step = Math.max(params.step, len / 20, 1);
+    // extend loop 1 infile outfile start len step [-wsplen] [-sscat]
+    args = ["loop", "1", inputPath, outputPath, "0", String(len), String(step), splice];
+  }
   if (params.scatter > 0) args.push(`-s${params.scatter}`);
   await runCdp("extend", args);
   return outputPath;

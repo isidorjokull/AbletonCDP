@@ -8,7 +8,7 @@ Built on the **Ableton Extensions SDK** (1.0.0-beta.1). The extension shells out
 
 ## Features
 
-- **113 CDP effects** grouped into a clip context menu, plus an **All Tools** rack that opens a grid of every effect and lets you **chain** processing without leaving the panel.
+- **118 CDP effects** grouped into a clip context menu, plus an **All Tools** rack that opens a grid of every effect and lets you **chain** processing without leaving the panel.
 - **Non-destructive by default.** The processed audio replaces the clip in place; the original is moved to a `CDP Originals` take lane. A fresh lane is created whenever the previous backup slot is occupied, so backups never overwrite each other. The clip's colour is preserved.
 - **Region-aware.** Only the portion of the file the clip actually plays is processed, not the whole underlying sample.
 - **Stereo-safe.** Stereo-native CDP tools run directly; the rest are split to mono, processed per channel, and re-interleaved.
@@ -21,11 +21,11 @@ Built on the **Ableton Extensions SDK** (1.0.0-beta.1). The extension shells out
 | Group | Tools |
 |-------|-------|
 | **Time & Pitch** | Pitch Shift · Time Stretch · Granular · **Brassage** · Echo · Stack · Vari-speed · Spectral Chord |
-| **Spectral** | Spectral Freeze · Spectral Blur · Spectral Chorus · Spectral Stretch · Spectral Sustain · Spectral Fold · **Frequency Shifter** · Spectral Scatter · Spectral Noise · Spectral Shuffle · Spectral Exaggerate · Spectral Step · Spectral Arpeggio · Spectral Invert · Spectral Waver · Spectral Glide · Spectral Trace · Spectral Roughen · Inharmonic Stretch · Formants · Spectral Randomise · Spectral Top Blur |
+| **Spectral** | Spectral Freeze · Spectral Blur · Spectral Chorus · Spectral Stretch · Spectral Sustain · Spectral Fold · **Frequency Shifter** · Spectral Scatter · Spectral Noise · Spectral Shuffle · Spectral Exaggerate · Spectral Step · Spectral Arpeggio · Spectral Invert · Spectral Waver · Spectral Glide · Spectral Trace · Spectral Roughen · Inharmonic Stretch · Formants · Spectral Randomise · Spectral Top Blur · Octave Fold · Spectral Focus · Spectral Filter |
 | **Waveset & Distort** | Overload · Fractal · Waveset Repeat · Waveset Reverse · Waveset Divide · Waveset Interpolate · Waveset Telescope · Waveset Omit · Bitcrush · Ring Mod · Waveset Multiply · Waveset Reform · Waveset Average · Waveset Pitch · Waveset Envelope · Waveset Harmonics · Waveset Hold · Waveset Delete · Waveset Shuffle · Waveset Gate · Pulse Train · Quirk · Clip · Waveset Octave · Waveset Shift · Waveset Warp · Waveset Stretch · Fractal Wave |
-| **Cut & Shuffle** | Bounce · Scramble · Constrict · Zigzag · Iteration Freeze · Shred · Scrub · Cantor · Iterate · Fugu · Advancing Loop · Doublets · Grain Reorder · Cascade · Sorter · Splinter |
+| **Cut & Shuffle** | Bounce · Scramble · Constrict · Zigzag · Iteration Freeze · Shred · Scrub · Cantor · Iterate · Fugu · Advancing Loop · Doublets · Grain Reorder · Cascade · Sorter · Splinter · Reverse |
 | **Envelope** | **Envelope Trigger** · Envelope Warp · Tremolo · Swell · Peak Chop · Shudder |
-| **Ambient & Space** | Reverb · Spectral Drunk · Spectral Spread · **Glisten** · **Hover** · Delay · Resonant Delay · Phaser · Sweep Filter · Spectral Weave · Spectral Hold · Drunk Walk · Self-similar · Tune to Chord · Hover 2 · Room Reverb · Tap Delay · Stereo Spin |
+| **Ambient & Space** | Reverb · Spectral Drunk · Spectral Spread · **Glisten** · **Hover** · Delay · Resonant Delay · Phaser · Sweep Filter · Spectral Weave · Spectral Hold · Drunk Walk · Self-similar · Tune to Chord · Hover 2 · Room Reverb · Tap Delay · Stereo Spin · Lo/Hi Pass |
 | **Cross & Morph** | **Morph Bridge** · **Morph** · Spectral Glide · **Vocoder** · Formant Transfer · Spectral Mean · Spectral Combine · Envelope Transfer · Waveset Interact · Cross Modulate · Convolve |
 
 **Envelope Trigger** is a generative gate: it synthesises its own amplitude envelope and re-triggers the clip in a rhythm you design — **Beat sync** (locked to Live's tempo), **Time** (fixed seconds), **Random** (scattered hits), or **Bounce** (bouncing-ball spacing that accelerates or decelerates). Attack, Release, and Floor shape each hit. No donor file required.
@@ -58,7 +58,7 @@ Configuration:
 - **CDP binary directory** — auto-detected; override with the `CDP_BIN_DIR` environment variable.
 - **Extension Host path** — set `EXTENSION_HOST_PATH` in `.env` (points at Live's bundled `ExtensionHost`).
 
-When the host starts you should see `activated: 113 tools + Rack + Repeat Last + Use as Second Sound registered` in its log. In Live, right-click any audio clip → the **CDP** actions appear in the context menu.
+When the host starts you should see `activated: 118 tools + Rack + Repeat Last + Use as Second Sound registered` in its log. In Live, right-click any audio clip → the **CDP** actions appear in the context menu.
 
 ---
 

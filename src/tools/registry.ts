@@ -33,7 +33,7 @@ import { frequencyShift } from "./frequency-shift.js";
 import { glisten } from "./glisten.js";
 import { hover } from "./hover.js";
 import { brassage } from "./brassage.js";
-import { bitcrush, ringMod, shred, scrub } from "./radical.js";
+import { bitcrush, ringMod, shred, scrub, reverse } from "./radical.js";
 import { stack } from "./stack.js";
 import { varispeed, type SpeedMode } from "./varispeed.js";
 import { delay, type DelayMode } from "./delay.js";
@@ -50,12 +50,13 @@ import {
 } from "./new-binaries.js";
 import { shudder } from "./shudder.js";
 import { cantor } from "./cantor.js";
-import { resonantDelay, phaser, sweepFilter, filterBank, type SweepType, type BankMode } from "./filters.js";
+import { resonantDelay, phaser, sweepFilter, filterBank, loHiPass, type SweepType, type BankMode } from "./filters.js";
 import {
   spectralScatter, spectralNoise, spectralShuffle, spectralExaggerate, spectralStep,
   spectralArpeggio, spectralInvert, spectralWaver, spectralGlide,
   spectralTrace, spectralSuppress, spectralPluck, spectralAverage, spectralWeave, spectralHold,
   freezeMoments, type TraceBand, type FreezeWhat,
+  octaveFold, spectralFocus, spectralFilter, type SpecFilterType,
   inharmonicStretch, formants, spectralRandomise, spectralTopBlur, selfSimilar, tuneToChord, spectralChord,
   type FormantMode,
   type ArpMode, type ArpWave, type GlideType,
@@ -483,13 +484,14 @@ export const TOOLS: ToolSpec[] = [
   {
     id: "cdp.wsRepeat", title: "Waveset Repeat", group: "Waveset & Distort",
     blurb: "Each wavecycle group repeats — robotic pitched stretching.",
-    docs: "Repeats individual wavecycles (zero-crossing to zero-crossing), which lengthens the sound while lowering its pitch in a synthetic, robotic way. Repeats/group sets how many times each fragment plays; cycles/group how big each fragment is. A signature CDP mangle — try it on vocals. Only below restricts the repeating to cycles under that frequency, so low content stretches while highs are discarded; leave it at 20000 to repeat everything.",
+    docs: "Repeats individual wavecycles (zero-crossing to zero-crossing), which lengthens the sound while lowering its pitch in a synthetic, robotic way. Repeats/group sets how many times each fragment plays; cycles/group how big each fragment is. A signature CDP mangle — try it on vocals. Only below restricts the repeating to cycles under that frequency, so low content stretches while highs are discarded; leave it at 20000 to repeat everything. Keep length (CDP's repeat2) skips ahead after each repeat so the clip keeps its duration and rhythm — a stuttering, pitch-dropped version in place (it ignores Only below).",
     params: [
       { key: "multiplier", label: "Repeats / group", type: "slider", min: 2, max: 16, step: 1, def: 4 },
       { key: "cycleCnt", label: "Cycles / group", type: "slider", min: 1, max: 16, step: 1, def: 3 },
       { key: "hiLim", label: "Only below (20000 = all)", type: "slider", min: 440, max: 20000, step: 10, def: 20000, unit: " Hz", log: true },
+      { key: "keepLength", label: "Keep length (no stretch)", type: "check", def: false },
     ],
-    run: (i, p, td) => wavesetRepeat(i, { multiplier: n(p.multiplier), cycleCnt: n(p.cycleCnt), hiLim: n(p.hiLim) }, td, td),
+    run: (i, p, td) => wavesetRepeat(i, { multiplier: n(p.multiplier), cycleCnt: n(p.cycleCnt), hiLim: n(p.hiLim), keepLength: Boolean(p.keepLength) }, td, td),
   },
   {
     id: "cdp.wsReverse", title: "Waveset Reverse", group: "Waveset & Distort",
@@ -551,12 +553,22 @@ export const TOOLS: ToolSpec[] = [
   {
     id: "cdp.specSustain", title: "Spectral Sustain", group: "Spectral",
     blurb: "Bands ring on until louder sound replaces them — instant pads.",
-    docs: "Holds each spectral band until something louder arrives in it, turning any source into a sustained, organ-like pad. Decay sets how fast held bands fade — 0 sustains forever; glissando lets the held resonances drift in pitch. Try it on drums or spoken word.",
+    docs: "Holds each spectral band until something louder arrives in it, turning any source into a sustained, organ-like pad. Decay sets how fast held bands fade — 0 sustains forever; glissando lets the held resonances drift in pitch. Engine: Super is CDP's superaccu; Classic is focus accu (CDP Express's \"accu\"), whose glide is in octaves per second and can also fall. Try it on drums or spoken word.",
     params: [
+      {
+        key: "engine", label: "Engine", type: "select", def: "super",
+        options: [{ value: "super", label: "Super (superaccu)" }, { value: "accu", label: "Classic (focus accu)" }],
+      },
       { key: "decay", label: "Decay (0 = infinite)", type: "slider", min: 0, max: 1, step: 0.05, def: 0.3 },
-      { key: "glis", label: "Glissando", type: "slider", min: 0, max: 1, step: 0.05, def: 0 },
+      {
+        key: "glis", label: "Glissando", type: "slider", def: 0, modeKey: "engine",
+        modeCfg: {
+          super: { label: "Glissando", min: 0, max: 1, step: 0.05, def: 0 },
+          accu: { label: "Glide (octaves / s)", min: -4, max: 4, step: 0.05, def: 0 },
+        },
+      },
     ],
-    run: (i, p, td) => spectralSustain(i, { decay: n(p.decay), glis: n(p.glis) }, td, td),
+    run: (i, p, td) => spectralSustain(i, { decay: n(p.decay), glis: n(p.glis), engine: p.engine === "accu" ? "accu" : "super" }, td, td),
   },
   {
     id: "cdp.specFold", title: "Spectral Fold", group: "Spectral",
@@ -1333,7 +1345,7 @@ export const TOOLS: ToolSpec[] = [
   {
     id: "cdp.drunk", title: "Drunk Walk", group: "Ambient & Space",
     blurb: "Random walk through the clip, spliced to any length.",
-    docs: "Builds a new sound from short segments read at positions that stagger at random around a point in the clip. Position sets where the walk is centred and Range how far it may roam (small = hovering on one spot, full = wandering the whole clip). Step is the biggest jump between segments, Segment their length, and Overlap blends them. Different every run.",
+    docs: "Builds a new sound from short segments read at positions that stagger at random around a point in the clip. Position sets where the walk is centred and Range how far it may roam (small = hovering on one spot, full = wandering the whole clip). Step is the biggest jump between segments, Segment their length, and Overlap blends them. Sober spells (CDP's drunk mode 2) let the clip play on normally from wherever the walk has got to, every so many segments — a stumble that keeps recovering. Different every run.",
     params: [
       { key: "lengthRatio", label: "Length", type: "slider", min: 0.5, max: 12, step: 0.5, def: 3, unit: "×" },
       { key: "position", label: "Position", type: "slider", min: 0, max: 1, step: 0.02, def: 0.5 },
@@ -1341,9 +1353,28 @@ export const TOOLS: ToolSpec[] = [
       { key: "step", label: "Step", type: "slider", min: 0.005, max: 2, step: 0.005, def: 0.2, unit: " s", log: true },
       { key: "segment", label: "Segment", type: "slider", min: 0.04, max: 1, step: 0.01, def: 0.2, unit: " s", log: true },
       { key: "overlap", label: "Overlap", type: "slider", min: 0, max: 0.9, step: 0.05, def: 0.3 },
+      {
+        key: "walk", label: "Walk", type: "select", def: "drunk",
+        options: [{ value: "drunk", label: "Drunk all the way" }, { value: "sober", label: "With sober spells" }],
+      },
+      {
+        key: "minDrunk", label: "Drunk segments (min)", type: "slider", def: 10, modeKey: "walk",
+        modeCfg: {
+          drunk: { label: "", min: 1, max: 100, step: 1, def: 10, hide: true },
+          sober: { label: "Drunk segments (min)", min: 1, max: 100, step: 1, def: 10 },
+        },
+      },
+      {
+        key: "maxDrunk", label: "Drunk segments (max)", type: "slider", def: 30, modeKey: "walk",
+        modeCfg: {
+          drunk: { label: "", min: 1, max: 100, step: 1, def: 30, hide: true },
+          sober: { label: "Drunk segments (max)", min: 1, max: 100, step: 1, def: 30 },
+        },
+      },
     ],
     run: (i, p, td) => drunkWalk(i, {
       lengthRatio: n(p.lengthRatio), position: n(p.position), range: n(p.range), step: n(p.step), segment: n(p.segment), overlap: n(p.overlap),
+      sober: p.walk === "sober", minDrunk: n(p.minDrunk), maxDrunk: n(p.maxDrunk),
     }, td),
   },
   {
@@ -1356,13 +1387,40 @@ export const TOOLS: ToolSpec[] = [
   {
     id: "cdp.advLoop", title: "Advancing Loop", group: "Cut & Shuffle",
     blurb: "A loop window that creeps through the clip — pulsing stretch.",
-    docs: "Loops a short window of the clip, moving the window forward a little on every repeat until it reaches the end. The clip is stretched by roughly Loop length ÷ Advance, with a pulse at the loop rate: small advances give a slow, stuttering crawl. Scatter makes the advance irregular. The stretch is capped at 20×.",
+    docs: "Loops a short window of the clip, moving the window forward a little on every repeat until it reaches the end. The clip is stretched by roughly Loop length ÷ Advance, with a pulse at the loop rate: small advances give a slow, stuttering crawl. Scatter makes the advance irregular. Ends chooses when it stops: when the window reaches the end (the stretch is then capped at 20×), after a set output length, or after a number of repeats — with the last two a tiny advance gives an almost stuck, slowly crawling loop.",
     params: [
+      {
+        key: "ends", label: "Ends", type: "select", def: "exhaust",
+        options: [
+          { value: "exhaust", label: "When the clip runs out" },
+          { value: "duration", label: "After an output length" },
+          { value: "count", label: "After a number of repeats" },
+        ],
+      },
       { key: "length", label: "Loop length", type: "slider", min: 20, max: 2000, step: 5, def: 200, unit: " ms", log: true },
       { key: "step", label: "Advance", type: "slider", min: 2, max: 1000, step: 1, def: 50, unit: " ms", log: true },
       { key: "scatter", label: "Scatter", type: "slider", min: 0, max: 200, step: 5, def: 0, unit: " ms" },
+      {
+        key: "outLength", label: "Output length", type: "slider", def: 4, unit: "×", modeKey: "ends",
+        modeCfg: {
+          exhaust: { label: "", min: 0.5, max: 20, step: 0.5, def: 4, hide: true },
+          duration: { label: "Output length", min: 0.5, max: 20, step: 0.5, def: 4 },
+          count: { label: "", min: 0.5, max: 20, step: 0.5, def: 4, hide: true },
+        },
+      },
+      {
+        key: "repeats", label: "Repeats", type: "slider", def: 16, modeKey: "ends",
+        modeCfg: {
+          exhaust: { label: "", min: 2, max: 200, step: 1, def: 16, hide: true },
+          duration: { label: "", min: 2, max: 200, step: 1, def: 16, hide: true },
+          count: { label: "Repeats", min: 2, max: 200, step: 1, def: 16 },
+        },
+      },
     ],
-    run: (i, p, td) => advancingLoop(i, { length: n(p.length), step: n(p.step), scatter: n(p.scatter) }, td),
+    run: (i, p, td) => advancingLoop(i, {
+      length: n(p.length), step: n(p.step), scatter: n(p.scatter),
+      ends: p.ends === "duration" || p.ends === "count" ? p.ends : "exhaust", outLength: n(p.outLength), repeats: n(p.repeats),
+    }, td),
   },
   {
     id: "cdp.doublets", title: "Doublets", group: "Cut & Shuffle",
@@ -1850,6 +1908,83 @@ export const TOOLS: ToolSpec[] = [
     ],
     run: (i, p, td) => stereoSpin(i, { rate: n(p.rate), doppler: n(p.doppler) }, td),
   },
+  {
+    id: "cdp.octaveFold", title: "Octave Fold", group: "Spectral",
+    blurb: "Octave-shifts every partial into one band — a sound squeezed into a register.",
+    docs: "Moves every spectral component up or down by whole octaves until it lands between Low and High, so the whole sound is folded into one register while keeping its pitch classes: a bass line becomes a tight midrange chord, a noisy texture a narrow shimmering band. Narrow bands give dense, organ-like clusters. Fuller keeps more of the spectrum.",
+    params: [
+      { key: "lo", label: "Low", type: "slider", min: 20, max: 4000, step: 1, def: 200, unit: " Hz", log: true },
+      { key: "hi", label: "High", type: "slider", min: 40, max: 16000, step: 1, def: 800, unit: " Hz", log: true },
+      { key: "fuller", label: "Fuller spectrum", type: "check", def: false },
+    ],
+    run: (i, p, td) => octaveFold(i, { lo: n(p.lo), hi: n(p.hi), fuller: Boolean(p.fuller) }, td, td),
+  },
+  {
+    id: "cdp.specFocus", title: "Spectral Focus", group: "Spectral",
+    blurb: "Pulls the energy onto the strongest spectral peaks — resonant, vocal.",
+    docs: "Finds up to Peaks of the strongest peaks in the spectrum as it evolves and filters around them, so the sound is focused onto its resonances — formant-like, ringing, sometimes vowel-ish. Bandwidth is each peak filter's width in octaves (narrow = whistling, wide = gentle colouring). Low and High set where peaks are searched; Stable only keeps peaks that last.",
+    params: [
+      { key: "peaks", label: "Peaks", type: "slider", min: 1, max: 16, step: 1, def: 4 },
+      { key: "bandwidth", label: "Bandwidth", type: "slider", min: 0.084, max: 4, step: 0.001, def: 0.25, unit: " oct", log: true },
+      { key: "lo", label: "Search from", type: "slider", min: 20, max: 4000, step: 1, def: 80, unit: " Hz", log: true },
+      { key: "hi", label: "Search to", type: "slider", min: 500, max: 20000, step: 10, def: 8000, unit: " Hz", log: true },
+      { key: "stable", label: "Stable peaks only", type: "check", def: false },
+    ],
+    run: (i, p, td) => spectralFocus(i, { peaks: n(p.peaks), bandwidth: n(p.bandwidth), lo: n(p.lo), hi: n(p.hi), stable: Boolean(p.stable) }, td, td),
+  },
+  {
+    id: "cdp.specFilter", title: "Spectral Filter", group: "Spectral",
+    blurb: "Brick-wall filtering in the spectrum: high, low, band or notch.",
+    docs: "Filters by removing analysis channels, so the cut is far steeper and more artificial than an ordinary filter — glassy, with no resonance. Skirt is the width of the transition in Hz. Band and Notch use From/To. Normalise brings the result back up to the input's level; any Gain other than 1 boosts or cuts the result instead.",
+    params: [
+      {
+        key: "type", label: "Type", type: "select", def: "hp",
+        options: [
+          { value: "hp", label: "High pass" }, { value: "lp", label: "Low pass" },
+          { value: "bp", label: "Band pass" }, { value: "notch", label: "Notch" },
+        ],
+      },
+      { key: "frq", label: "Cutoff / from", type: "slider", min: 20, max: 16000, step: 1, def: 500, unit: " Hz", log: true },
+      {
+        key: "frq2", label: "To", type: "slider", def: 2000, unit: " Hz", log: true, min: 40, max: 20000, step: 1, modeKey: "type",
+        modeCfg: {
+          hp: { label: "", min: 40, max: 20000, step: 1, def: 2000, hide: true },
+          lp: { label: "", min: 40, max: 20000, step: 1, def: 2000, hide: true },
+          bp: { label: "To", min: 40, max: 20000, step: 1, def: 2000 },
+          notch: { label: "To", min: 40, max: 20000, step: 1, def: 2000 },
+        },
+      },
+      { key: "q", label: "Skirt", type: "slider", min: 1, max: 2000, step: 1, def: 50, unit: " Hz", log: true },
+      { key: "normalise", label: "Normalise", type: "check", def: true },
+      { key: "gain", label: "Gain (1 = off)", type: "slider", min: 0.1, max: 8, step: 0.05, def: 1, log: true },
+    ],
+    run: (i, p, td) => spectralFilter(i, {
+      type: String(p.type) as SpecFilterType, frq: n(p.frq), frq2: n(p.frq2), q: n(p.q), normalise: Boolean(p.normalise), gain: n(p.gain),
+    }, td, td),
+  },
+  {
+    id: "cdp.loHiPass", title: "Lo/Hi Pass", group: "Ambient & Space",
+    blurb: "A fixed low-pass or high-pass filter with a selectable slope.",
+    docs: "A plain, clean time-domain filter for shaping before or after heavier processing. Cutoff is the last frequency let through; Slope is how wide the transition is (small = steep). Depth is how far the stopped band is attenuated — deeper is sharper but slower to compute.",
+    params: [
+      {
+        key: "type", label: "Type", type: "select", def: "low",
+        options: [{ value: "low", label: "Low pass" }, { value: "high", label: "High pass" }],
+      },
+      { key: "cutoff", label: "Cutoff", type: "slider", min: 20, max: 18000, step: 1, def: 1000, unit: " Hz", log: true },
+      { key: "slope", label: "Slope", type: "slider", min: 0.02, max: 1, step: 0.01, def: 0.25, log: true },
+      { key: "attenuation", label: "Depth", type: "slider", min: -96, max: -12, step: 1, def: -60, unit: " dB" },
+    ],
+    run: (i, p, td) => loHiPass(i, { type: p.type === "high" ? "high" : "low", cutoff: n(p.cutoff), slope: n(p.slope), attenuation: n(p.attenuation) }, td),
+  },
+  {
+    id: "cdp.reverse", title: "Reverse", group: "Cut & Shuffle",
+    blurb: "Plays the clip backwards.",
+    docs: "CDP's own reverse (modify radical 1). Live can reverse a sample too, but this one bakes it into a new file, so it can sit in a CDP chain — reverse, process, reverse back is a classic way to put an effect's tail before the sound.",
+    params: [],
+    run: (i, p, td) => reverse(i, p, td),
+  },
+
   // ---- Cross & Morph: two-input processes. `second` is the dialog's pick, prepared by the extension.
   {
     id: "cdp.morphBridge", title: "Morph Bridge", group: "Cross & Morph",

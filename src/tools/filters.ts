@@ -145,3 +145,26 @@ export async function filterBank(
   await runCdp("filter", args, { binDir });
   return outputPath;
 }
+
+export interface LoHiPassParams {
+  type: "low" | "high";
+  cutoff: number;      // Hz: the last frequency passed
+  slope: number;       // transition width as a fraction of the cutoff (0.05 = steep)
+  attenuation: number; // dB reached at the stop band (−96 to −6); deeper is sharper but slower
+}
+
+/**
+ * `filter lohi 1 in out attenuation pass-band stop-band -t0` — stop above pass =
+ * low-pass, below = high-pass. Stereo-native.
+ */
+export async function loHiPass(inputPath: string, p: LoHiPassParams, outputDir?: string): Promise<string> {
+  const outputPath = buildOutputPath(inputPath, p.type === "high" ? "hipass" : "lopass", outputDir);
+  const pass = clamp(p.cutoff, 20, 20000);
+  const width = clamp(p.slope, 0.01, 2);
+  const stop = p.type === "high" ? pass / (1 + width) : Math.min(21000, pass * (1 + width));
+  await runCdp("filter", [
+    "lohi", "1", inputPath, outputPath,
+    String(clamp(p.attenuation, -96, -6)), pass.toFixed(1), stop.toFixed(1), "-t0",
+  ]);
+  return outputPath;
+}
