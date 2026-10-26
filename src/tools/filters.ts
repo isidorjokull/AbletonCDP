@@ -55,7 +55,7 @@ export type SweepType = "bandpass" | "lowpass" | "highpass" | "notch";
 // noise, static 1 kHz filter): 2 boosts the middle and cuts both ends, 3 keeps the
 // lows, 4 keeps the highs. The HTML docs (1 HP, 2 LP, 3 BP, 4 notch) are WRONG — do
 // not "fix" this to match them.
-const SWEEP_MODE: Record<SweepType, string> = { notch: "1", bandpass: "2", lowpass: "3", highpass: "4" };
+export const SWEEP_MODE: Record<SweepType, string> = { notch: "1", bandpass: "2", lowpass: "3", highpass: "4" };
 
 export interface SweepFilterParams {
   type: SweepType;

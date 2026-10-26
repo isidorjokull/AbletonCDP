@@ -3,8 +3,10 @@ import {
   AudioClip,
   AudioTrack,
   ClipSlot,
+  DataModelObject,
   TakeLane,
   type ActivationContext,
+  type ArrangementSelection,
   type Handle,
 } from "@ableton-extensions/sdk";
 import { tmpdir } from "os";
@@ -21,6 +23,8 @@ import {
   ALL_DIALOG_W,
   ALL_DIALOG_H,
 } from "./ui/dialog.js";
+import { GENERATORS, generatorSeconds, type GeneratorSpec } from "./tools/generatorRegistry.js";
+import { renderGeneratorDialog, generatorDialogSize, type GenContext } from "./ui/generatorDialog.js";
 import { startCdpServer, DEFAULT_PORT, type Dispatcher } from "./server.js";
 import { RackState } from "./rackState.js";
 import { createDispatcher, type SdkLike } from "./dispatch.js";
@@ -125,6 +129,68 @@ async function createBackupClip(
   throw new Error(`Could not back up the original clip (nothing was changed).\n${errors.join("\n")}`);
 }
 
+/**
+ * Recreates `clip`, untouched, on a "CDP Originals" take lane of its track
+ * before anything replaces or covers it: the first such lane with nothing in
+ * the clip's range, else a new one, so an earlier backup is never overwritten.
+ */
+async function backupToOriginals(track: AudioTrack<"1.0.0">, clip: AudioClip<"1.0.0">, tempo: number): Promise<void> {
+  const origName = clip.name;
+  const origFile = clip.filePath;
+  const origColor = clip.color;
+  const origStart = clip.startTime;
+  const origDuration = clip.duration;
+  const origWarped = clip.warping;
+  // Replicate the original's region/loop so the backup sounds identical
+  const looping = origWarped ? clip.looping : false;
+  const origLoop = {
+    looping,
+    startMarker: clip.startMarker,
+    endMarker: clip.endMarker,
+    loopStart: looping ? clip.loopStart : clip.startMarker,
+    loopEnd: looping ? clip.loopEnd : clip.endMarker,
+  };
+
+  // Use the first backup lane that has no clip overlapping the original's
+  // range; otherwise create a fresh lane so earlier backups are never
+  // overwritten by the new one.
+  const origEnd = origStart + origDuration;
+  const isFree = (l: TakeLane<"1.0.0">) =>
+    !l.clips.some((c) => c.startTime < origEnd && c.endTime > origStart);
+  let lane = track.takeLanes.find((l) => l.name === ORIGINALS_LANE && isFree(l));
+  if (!lane) {
+    lane = await step("create backup lane", () => track.createTakeLane());
+    lane.name = ORIGINALS_LANE;
+  }
+
+  const base = { filePath: origFile, startTime: origStart, isWarped: origWarped };
+  const attempts: Array<[string, LaneClipArgs]> = origWarped
+    ? [
+        ["warped", { ...base, duration: origDuration, loopSettings: origLoop }],
+        ["warped, no duration", { ...base, loopSettings: origLoop }],
+      ]
+    : (() => {
+        // Unwarped: never send `duration` — it is beats, and Live derives the
+        // arrangement length from the marker window anyway.
+        const toBeats = (s: number) => (s * tempo) / 60;
+        const beatLoop = {
+          looping: false,
+          startMarker: toBeats(origLoop.startMarker),
+          endMarker: toBeats(origLoop.endMarker),
+          loopStart: toBeats(origLoop.startMarker),
+          loopEnd: toBeats(origLoop.endMarker),
+        };
+        return [
+          ["unwarped, markers in seconds", { ...base, loopSettings: origLoop }],
+          ["unwarped, markers in beats", { ...base, loopSettings: beatLoop }],
+          ["unwarped, with duration", { ...base, duration: origDuration, loopSettings: origLoop }],
+        ];
+      })();
+  const backup = await createBackupClip(lane, attempts);
+  backup.name = origName;
+  backup.color = origColor;
+}
+
 async function placeResult(
   clip: AudioClip<"1.0.0">,
   importedPath: string,
@@ -134,62 +200,13 @@ async function placeResult(
 ): Promise<AudioClip<"1.0.0"> | null> {
   const parent = clip.parent;
   const origName = clip.name;
-  const origFile = clip.filePath;
   const origColor = clip.color;
   const newName = `${origName} [${label}]`;
 
   if (parent instanceof AudioTrack) {
     const origStart = clip.startTime;
-    const origDuration = clip.duration;
     const origWarped = clip.warping;
-    // Replicate the original's region/loop so the backup sounds identical
-    const looping = origWarped ? clip.looping : false;
-    const origLoop = {
-      looping,
-      startMarker: clip.startMarker,
-      endMarker: clip.endMarker,
-      loopStart: looping ? clip.loopStart : clip.startMarker,
-      loopEnd: looping ? clip.loopEnd : clip.endMarker,
-    };
-
-    // Use the first backup lane that has no clip overlapping the original's
-    // range; otherwise create a fresh lane so earlier backups are never
-    // overwritten by the new one.
-    const origEnd = origStart + origDuration;
-    const isFree = (l: TakeLane<"1.0.0">) =>
-      !l.clips.some((c) => c.startTime < origEnd && c.endTime > origStart);
-    let lane = parent.takeLanes.find((l) => l.name === ORIGINALS_LANE && isFree(l));
-    if (!lane) {
-      lane = await step("create backup lane", () => parent.createTakeLane());
-      lane.name = ORIGINALS_LANE;
-    }
-
-    const base = { filePath: origFile, startTime: origStart, isWarped: origWarped };
-    const attempts: Array<[string, LaneClipArgs]> = origWarped
-      ? [
-          ["warped", { ...base, duration: origDuration, loopSettings: origLoop }],
-          ["warped, no duration", { ...base, loopSettings: origLoop }],
-        ]
-      : (() => {
-          // Unwarped: never send `duration` — it is beats, and Live derives the
-          // arrangement length from the marker window anyway.
-          const toBeats = (s: number) => (s * tempo) / 60;
-          const beatLoop = {
-            looping: false,
-            startMarker: toBeats(origLoop.startMarker),
-            endMarker: toBeats(origLoop.endMarker),
-            loopStart: toBeats(origLoop.startMarker),
-            loopEnd: toBeats(origLoop.endMarker),
-          };
-          return [
-            ["unwarped, markers in seconds", { ...base, loopSettings: origLoop }],
-            ["unwarped, markers in beats", { ...base, loopSettings: beatLoop }],
-            ["unwarped, with duration", { ...base, duration: origDuration, loopSettings: origLoop }],
-          ];
-        })();
-    const backup = await createBackupClip(lane, attempts);
-    backup.name = origName;
-    backup.color = origColor;
+    await backupToOriginals(parent, clip, tempo);
 
     await step("remove original", () => parent.deleteClip(clip));
     // A bounce is already at song tempo, so it goes in unwarped — warped, Live's
@@ -517,6 +534,174 @@ function registerUseAsSecond(context: Ctx): void {
   });
 }
 
+/* ------------------------------------------------------------------ */
+/* Generators: CDP synthesis into a new clip                            */
+/* ------------------------------------------------------------------ */
+
+/** Where a generated clip goes: an Arrangement position on a track or take lane, or a Session slot. */
+type GenTarget =
+  | { kind: "track"; track: AudioTrack<"1.0.0">; start: number; selectionBeats: number | null }
+  | { kind: "lane"; lane: TakeLane<"1.0.0">; start: number; selectionBeats: number | null }
+  | { kind: "slot"; slot: ClipSlot<"1.0.0"> };
+
+const NOT_AUDIO = "Generators make audio clips: right-click a time selection on an audio track, or an empty clip slot of one.";
+
+/**
+ * The first audio track (or take lane of one) in an Arrangement selection. Its
+ * times are song beats, like clip start times; a single point (no range) has
+ * no selection length.
+ */
+function arrangementTarget(context: Ctx, sel: ArrangementSelection): GenTarget {
+  const a = Number(sel.time_selection_start);
+  const b = Number(sel.time_selection_end);
+  const start = Math.max(0, Math.min(a, b));
+  const len = Math.abs(b - a);
+  const selectionBeats = len > 1e-6 ? len : null;
+  console.log(`[cdp-for-live] generator on selection: start ${a}, end ${b}, ${sel.selected_lanes?.length ?? 0} lane(s)`);
+  for (const h of sel.selected_lanes ?? []) {
+    let obj: unknown;
+    try { obj = context.getObjectFromHandle(h, DataModelObject); } catch { continue; }
+    if (obj instanceof AudioTrack) return { kind: "track", track: obj, start, selectionBeats };
+    if (obj instanceof TakeLane && obj.parent instanceof AudioTrack) return { kind: "lane", lane: obj, start, selectionBeats };
+  }
+  throw new Error(NOT_AUDIO);
+}
+
+/** An empty Session slot on an audio track. */
+function slotTarget(context: Ctx, handle: Handle): GenTarget {
+  const slot = context.getObjectFromHandle(handle, ClipSlot);
+  if (!(slot.parent instanceof AudioTrack)) throw new Error(NOT_AUDIO);
+  if (slot.clip) throw new Error("This slot already holds a clip. Right-click an empty slot to generate into it.");
+  return { kind: "slot", slot };
+}
+
+/** "Generate Chord" → "CDP Chord", the new clip's name. */
+const genClipName = (spec: GeneratorSpec) => `CDP ${spec.title.replace(/^Generate /, "")}`;
+
+/**
+ * Places the generated file, unwarped (it was made at song tempo). On a
+ * track's main lane every clip the new one will cover is first backed up to
+ * "CDP Originals", exactly as an effect does; if Live then refuses the new
+ * clip over them, the covered clips (safe on the backup lane) are removed and
+ * it is placed again.
+ */
+async function placeGenerated(target: GenTarget, filePath: string, spec: GeneratorSpec, tempo: number, seconds: number): Promise<void> {
+  const name = genClipName(spec);
+  if (target.kind === "slot") {
+    const clip = await target.slot.createAudioClip({ filePath, isWarped: false });
+    clip.name = name;
+    return;
+  }
+  if (target.kind === "lane") {
+    const clip = await target.lane.createAudioClip({ filePath, startTime: target.start, isWarped: false });
+    clip.name = name;
+    return;
+  }
+  const { track, start } = target;
+  const end = start + (seconds * tempo) / 60;
+  const covered = track.arrangementClips.filter(
+    (c): c is AudioClip<"1.0.0"> => c instanceof AudioClip && c.startTime < end - 1e-6 && c.endTime > start + 1e-6
+  );
+  for (const c of covered) await step("back up covered clip", () => backupToOriginals(track, c, tempo));
+  let clip: AudioClip<"1.0.0">;
+  try {
+    clip = await track.createAudioClip({ filePath, startTime: start, isWarped: false });
+  } catch (err: unknown) {
+    if (!covered.length) throw err;
+    console.warn(`[cdp-for-live] ${spec.title}: placing over ${covered.length} clip(s) failed (${err instanceof Error ? err.message : String(err)}); removing them (backed up) and retrying`);
+    for (const c of covered) await step("remove covered clip", () => track.deleteClip(c));
+    clip = await track.createAudioClip({ filePath, startTime: start, isWarped: false });
+  }
+  clip.name = name;
+  if (covered.length) console.log(`[cdp-for-live] ${spec.title}: ${covered.length} covered clip(s) backed up to "${ORIGINALS_LANE}"`);
+}
+
+/** Each generator's last settings, so it reopens where it was left; persisted to storage. */
+let genMemory: Record<string, ToolParams> = {};
+let genPersistPath: string | null = null;
+
+function loadGenMemory(): void {
+  if (!genPersistPath || !existsSync(genPersistPath)) return;
+  try {
+    const j = JSON.parse(readFileSync(genPersistPath, "utf8")) as Record<string, ToolParams>;
+    if (j && typeof j === "object") genMemory = j;
+  } catch { /* ignore corrupt state */ }
+}
+
+function rememberGenerator(id: string, params: ToolParams): void {
+  genMemory[id] = params;
+  if (!genPersistPath) return;
+  try { writeFileSync(genPersistPath, JSON.stringify(genMemory)); } catch { /* non-fatal */ }
+}
+
+/** Dialog → synthesis → import → placement, for one generator at one target. */
+async function runGenerator(context: Ctx, tempDir: string, spec: GeneratorSpec, target: GenTarget): Promise<void> {
+  const tempo = context.application.song.tempo;
+  const genCtx: GenContext = { tempo, selectionBeats: target.kind === "slot" ? null : target.selectionBeats };
+  const [w, h] = generatorDialogSize(spec);
+  const result = await context.ui.showModalDialog(
+    dataUrl(renderGeneratorDialog(spec, genMemory[spec.id] ?? null, genCtx)), w, h
+  );
+  if (!result) return;
+  const saved = JSON.parse(result) as ToolParams | null;
+  if (!saved) return;
+  rememberGenerator(spec.id, saved);
+  const params: ToolParams = { ...toolDefaults(spec), ...saved };
+  const seconds = generatorSeconds(params, tempo, genCtx.selectionBeats);
+  if (!Number.isFinite(seconds)) throw new Error("No length to generate: choose Beats or Seconds.");
+
+  const ownTemp = context.environment.tempDirectory === tempDir; // see processClip
+  const tempBefore = ownTemp ? listDir(tempDir) : null;
+  let importedPath: string;
+  try {
+    const outputPath = (await context.ui.withinProgressDialog(`CDP: ${spec.title}…`, {}, async (update) => {
+      await update(`${spec.title} (${seconds.toFixed(1)} s)…`, 30);
+      return step("CDP", () => spec.run(seconds, params, tempDir));
+    })) as string;
+    importedPath = await step("import", () => context.resources.importIntoProject(outputPath));
+  } finally {
+    if (tempBefore) removeNewFiles(tempDir, tempBefore);
+  }
+  await step("place result", () => placeGenerated(target, importedPath, spec, tempo, seconds));
+}
+
+/** Logs instead of letting a rejected registration (an unsupported scope) become an unhandled rejection. */
+function addMenuAction(context: Ctx, scope: Parameters<Ctx["ui"]["registerContextMenuAction"]>[0], title: string, id: string): void {
+  void Promise.resolve(context.ui.registerContextMenuAction(scope, title, id)).catch((err: unknown) => {
+    console.warn(`[cdp-for-live] could not add "${title}" to the ${scope} menu: ${err instanceof Error ? err.message : String(err)}`);
+  });
+}
+
+/**
+ * Each generator in two menus: a right-click on an Arrangement time selection
+ * of an audio track (the clip starts at the selection, as long as it by
+ * default) and on a Session clip slot (it must be empty).
+ */
+function registerGenerator(context: Ctx, tempDir: string, spec: GeneratorSpec): void {
+  const title = `CDP: ${spec.title}…`;
+  const fail = async (err: unknown) => {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`[cdp-for-live] ${spec.title} error:`, msg);
+    await context.ui.showModalDialog(errorDialogUrl(`${spec.title} failed`, msg), 400, 190);
+  };
+  addMenuAction(context, "AudioTrack.ArrangementSelection", title, spec.id);
+  context.commands.registerCommand(spec.id, (arg: unknown) => {
+    void (async () => {
+      try {
+        await runGenerator(context, tempDir, spec, arrangementTarget(context, arg as ArrangementSelection));
+      } catch (err: unknown) { await fail(err); }
+    })();
+  });
+  addMenuAction(context, "ClipSlot", title, `${spec.id}.slot`);
+  context.commands.registerCommand(`${spec.id}.slot`, (arg: unknown) => {
+    void (async () => {
+      try {
+        await runGenerator(context, tempDir, spec, slotTarget(context, arg as Handle));
+      } catch (err: unknown) { await fail(err); }
+    })();
+  });
+}
+
 const NOTHING_YET = "Run any CDP effect once (from a tool menu or the Rack), then Repeat Last will re-apply it here with a single click — ideal for a keyboard shortcut or Stream Deck key.";
 
 /**
@@ -582,15 +767,18 @@ export function activate(activation: ActivationContext) {
   const storeDir = context.environment.storageDirectory;
   persistPath = storeDir ? join(storeDir, "cdp-last.json") : null;
   loadLast();
+  genPersistPath = storeDir ? join(storeDir, "cdp-generators.json") : null;
+  loadGenMemory();
 
   registerRack(context, tempDir);
   registerRepeatLast(context, tempDir);
   registerUseAsSecond(context);
   for (const spec of TOOLS) registerTool(context, tempDir, spec);
+  for (const spec of GENERATORS) registerGenerator(context, tempDir, spec);
 
   startCommandEndpoint(context);
 
-  console.log(`[cdp-for-live] activated: ${TOOLS.length} tools + Rack + Repeat Last + Use as Second Sound registered`);
+  console.log(`[cdp-for-live] activated: ${TOOLS.length} tools + ${GENERATORS.length} generators + Rack + Repeat Last + Use as Second Sound registered`);
 }
 
 /**

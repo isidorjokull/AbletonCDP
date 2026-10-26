@@ -431,6 +431,40 @@ export async function concatAudio(inputs: string[], outputPath: string): Promise
   await runFfmpeg(args);
 }
 
+/**
+ * Exactly `seconds` of a file: padded with silence or cut (a filter's ringing
+ * tail), with 5 ms in and 20 ms out fades so the clip never clicks. 24-bit WAV.
+ */
+export async function fitToLength(inputPath: string, seconds: number, outputPath: string): Promise<void> {
+  const s = Math.max(0.05, seconds);
+  const out = Math.min(0.02, s / 4);
+  await runFfmpeg([
+    "-y", "-i", inputPath,
+    "-af", `apad=whole_dur=${s.toFixed(6)},atrim=0:${s.toFixed(6)},afade=t=in:d=0.005,` +
+      `afade=t=out:st=${(s - out).toFixed(6)}:d=${out.toFixed(6)}`,
+    "-c:a", "pcm_s24le", outputPath,
+  ]);
+}
+
+/**
+ * Sums mono files into one file without level normalisation: `left` alone
+ * gives mono, `left` + `right` a stereo file with one summed side per channel.
+ */
+export async function mixVoices(left: string[], right: string[] | null, outputPath: string): Promise<void> {
+  const files = [...left, ...(right ?? [])];
+  const args = ["-y"];
+  for (const f of files) args.push("-i", f);
+  const sum = (from: number, count: number, label: string) =>
+    count === 1
+      ? `[${from}:a]anull[${label}]`
+      : `${Array.from({ length: count }, (_, i) => `[${from + i}:a]`).join("")}amix=inputs=${count}:normalize=0[${label}]`;
+  const graph = right
+    ? `${sum(0, left.length, "l")};${sum(left.length, right.length, "r")};[l][r]join=inputs=2:channel_layout=stereo[out]`
+    : sum(0, left.length, "out");
+  args.push("-filter_complex", graph, "-map", "[out]", "-c:a", "pcm_s24le", outputPath);
+  await runFfmpeg(args);
+}
+
 export function buildOutputPath(
   inputPath: string,
   suffix: string,

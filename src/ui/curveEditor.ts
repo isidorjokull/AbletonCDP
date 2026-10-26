@@ -114,7 +114,7 @@ function buildCurves(row,p,state,init){
     var r=cvRange(cur);
     state[cur.curveKey]=cvSer(pts.map(function(q){return {t:q.t,v:cvFromDisp(q.v,r),b:q.b}}));
   }
-  function fmtVal(tg,v){return fmt({type:'slider',step:tg.step,log:tg.log,unit:tg.unit},Number(v))}
+  function fmtVal(tg,v){return fmt({type:'slider',step:tg.step,log:tg.log,unit:tg.unit,display:tg.display},Number(v))}
   function presetCtx(tg,name){
     var m=meta(tg),c=cvClip();
     return {c:cvToDisp(state[tg.param],cvRange(tg)),d:m.depth!==undefined?m.depth:0.6,

@@ -123,8 +123,12 @@ function send(m){(window.webkit&&window.webkit.messageHandlers&&window.webkit.me
   ?window.webkit.messageHandlers.live
   :window.chrome&&window.chrome.webview||{postMessage:function(){}}).postMessage(m)}
 function decimals(step){if(step>=1)return 0;var s=String(step);var i=s.indexOf('.');return i<0?0:s.length-i-1}
+var NOTE_NAMES=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+function noteName(v){var m=Math.round(v),c=Math.round((v-m)*100);
+  return NOTE_NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1)+(c?(c>0?' +':' ')+c+'c':'')}
 function fmt(p,v){
   if(p.type==='check')return '';
+  if(p.display==='note')return noteName(v);
   var d=decimals(p.step||1);
   if(p.log&&v>=100)d=0;else if(p.log&&v>=10)d=1;else if(p.log)d=2;
   return v.toFixed(d)+(p.unit||'');
@@ -228,6 +232,7 @@ function randomize(container,spec){
   var st=container.__eng.collect();
   // pass 1: selects + checks (these can change which sliders are active)
   spec.forEach(function(p){
+    if(p.keep)return;
     if(p.type==='select')st[p.key]=p.options[Math.floor(Math.random()*p.options.length)].value;
     else if(p.type==='check')st[p.key]=Math.random()<0.5;
   });
@@ -239,7 +244,7 @@ function randomize(container,spec){
       p.targets.forEach(function(tg){if(tg.kind==='clip'&&(!p.modeKey||!tg.modes||tg.modes.indexOf(mode)>=0))st[tg.param]=rollSlider(tg,tg)});
       return;
     }
-    if(p.type!=='slider')return;
+    if(p.type!=='slider'||p.keep)return;
     var eff=effFor(spec,p,st);if(eff.hide)return;
     st[p.key]=rollSlider(p,eff);
   });
@@ -259,13 +264,23 @@ function rowHeight(p: ParamSpec): number {
   return p.type === "check" ? 28 : p.type === "slider" ? 47 : p.type === "curves" ? 330 : 50; // select, text, second: 50
 }
 
-function docsHeight(spec: ToolSpec): number {
+function docsHeight(spec: DialogSpec): number {
   // ~52 chars/line at this width; 15px line-height + 20px padding + 12px margin + ~14px category
   const lines = Math.ceil(spec.docs.length / 52);
   return lines * 15 + 20 + 12 + 14;
 }
 
-export function toolDialogSize(spec: ToolSpec): [number, number] {
+/** What a per-tool dialog shows: a tool's or a generator's spec. */
+export type DialogSpec = Pick<ToolSpec, "title" | "blurb" | "docs" | "params"> & { group: string };
+
+export interface DialogOptions {
+  /** The main button's label (default "Process"). */
+  okLabel?: string;
+  /** Extra page script, run after the params are built (`box`, `SPEC`, `CLIP` in scope). */
+  script?: string;
+}
+
+export function toolDialogSize(spec: DialogSpec): [number, number] {
   const h = 40 /*hdr*/ + 30 /*blurb*/ + 22 /*params pad*/ +
     spec.params.reduce((a, p) => a + rowHeight(p), 0) +
     (spec.params.length - 1) * 11 + docsHeight(spec) + 47 /*ftr*/ + 20 /*safety*/;
@@ -273,9 +288,10 @@ export function toolDialogSize(spec: ToolSpec): [number, number] {
 }
 
 export function renderToolDialog(
-  spec: ToolSpec,
+  spec: DialogSpec,
   init: Record<string, unknown> | null = null,
-  clip: DialogClip | null = null
+  clip: DialogClip | null = null,
+  opts: DialogOptions = {}
 ): string {
   const clientSpec = spec.params;
   return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>CDP: ${spec.title}</title>
@@ -285,7 +301,7 @@ export function renderToolDialog(
 <div class="params" id="params"></div>
 <div class="docs"><span class="cat">${spec.group}</span>${spec.docs}</div>
 <div class="ftr"><button class="dice" id="rnd" title="Randomize parameters">🎲 Random</button><span class="spacer"></span>
-<button id="cancel">Cancel</button><button class="pri" id="ok">Process</button></div>
+<button id="cancel">Cancel</button><button class="pri" id="ok">${opts.okLabel ?? "Process"}</button></div>
 <script>${PARAM_JS}${CURVE_JS}
 var SPEC=${embed(clientSpec)};
 var INIT=${embed(init)};
@@ -301,6 +317,7 @@ document.addEventListener('keydown',function(e){
   if(e.key==='Enter')ok();if(e.key==='Escape')cancel();
   if(e.key==='r'&&(e.metaKey||e.ctrlKey)){e.preventDefault();randomize(box,SPEC)}
 });
+${opts.script ?? ""}
 </script></body></html>`;
 }
 

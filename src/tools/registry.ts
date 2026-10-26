@@ -89,6 +89,8 @@ export interface CurveTarget {
   step: number;
   def: number;
   unit?: string;
+  /** `note`: show the value (a MIDI note number) as a note name. */
+  display?: "note";
   modes?: string[];
   kind: "clip" | "shape";
 }
@@ -114,6 +116,10 @@ export interface ParamSpec {
   /** for params whose range depends on a sibling select (keyed by its value) */
   modeCfg?: Record<string, { label: string; min: number; max: number; step: number; def: number; hide?: boolean }>;
   modeKey?: string;
+  /** `note`: show the value (a MIDI note number) as a note name. */
+  display?: "note";
+  /** Random leaves it alone (a generator's length and level). */
+  keep?: boolean;
 }
 
 export type ToolParams = Record<string, number | string | boolean>;
@@ -2244,7 +2250,7 @@ export const GROUP_ORDER: ToolSpec["group"][] = [
  * curves param's targets (fixed value + empty curve). Lay saved params over it
  * so settings stored before a param existed (Repeat Last) still run.
  */
-export function toolDefaults(spec: ToolSpec): ToolParams {
+export function toolDefaults(spec: Pick<ToolSpec, "params">): ToolParams {
   const out: ToolParams = {};
   for (const p of spec.params) {
     out[p.key] = p.def;
