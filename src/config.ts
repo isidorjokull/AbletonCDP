@@ -10,14 +10,27 @@ import { join } from "path";
  * ERR_ACCESS_DENIED on a path outside them rather than returning false. The
  * external binaries we shell out to necessarily live outside that boundary, so
  * fall back to a child process (which is permitted) to answer the question.
+ * That child blocks the shared host, so positive answers are remembered.
  */
 export function pathExists(p: string): boolean {
+  if (found.has(p)) return true;
+  let exists: boolean;
   try {
-    return existsSync(p);
+    exists = existsSync(p);
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code !== "ERR_ACCESS_DENIED") throw err;
-    return spawnSync("/bin/test", ["-e", p]).status === 0;
+    exists = spawnSync("/bin/test", ["-e", p]).status === 0;
   }
+  if (exists) found.add(p);
+  return exists;
+}
+
+/** Paths already seen to exist. Only positive answers are kept, so a binary installed later is still found. */
+const found = new Set<string>();
+
+/** Forgets every remembered path; for tests. */
+export function __resetPathCache(): void {
+  found.clear();
 }
 
 export function getCdpBinDir(): string {

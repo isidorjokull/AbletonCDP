@@ -10,7 +10,7 @@ import { join } from "node:path";
 import * as esbuild from "esbuild";
 import { findLive } from "./live-paths.mjs";
 import { ensureFixtures } from "../tests/integration/fixtures.js";
-import { KNOWN_DEFECTS, missingBinaries, type CaseResult } from "../tests/integration/sandboxHarness.js";
+import { knownDefectOf, missingBinaries, type CaseResult } from "../tests/integration/sandboxHarness.js";
 
 const repo = join(import.meta.dirname, "..");
 
@@ -75,7 +75,7 @@ try {
     exitCode = 3;
   } else {
     const { node: version, results } = JSON.parse(line.slice("RESULTS ".length)) as { node: string; results: CaseResult[] };
-    const known = (r: CaseResult) => `${r.id}:${r.input}` in KNOWN_DEFECTS;
+    const known = (r: CaseResult) => knownDefectOf(r) !== undefined;
     const failed = results.filter((r) => !r.ok && !known(r));
     const todo = results.filter(known);
     for (const r of failed) console.log(`FAIL ${r.id} on ${r.input}: ${r.detail}`);

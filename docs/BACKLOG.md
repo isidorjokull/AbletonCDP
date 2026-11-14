@@ -17,6 +17,7 @@ Open work, one line per item, with the date it was found. Read this at the start
 - `runCdp` keeps the whole stderr of every run in memory, unbounded (2026-10-04).
 - `cdp.grains` (Grain Reorder) fails `npm run test:cdp` on both `mono` and `stereo` (sweep plus noise bursts) at its defaults: `No grains found at this Gate setting.` The default Gate (0.1) finds no attack in material that never falls quiet; the tool needs a gate that copes, or the suite a percussive fixture for it (2026-11-14).
 - `toolDialogSize` counts mode-hidden params when it sums the dialog height (capped at 680), so mode-heavy dialogs show empty space (noted before 2026-11-14, date not recorded).
+- 2026-11-14: one `npm run test:sandbox` run hung on `cdp.spectralFreeze` (mono) for over 60 s while the machine's load average was about 18; the watchdog stopped the run. Not reproduced: the same case takes 0.9 s alone, and an immediate re-run of the suite passed. Cause unknown; if it recurs, note the load average and which case.
 
 ## Ideas
 

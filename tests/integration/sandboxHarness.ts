@@ -33,15 +33,29 @@ const GRAINS_DEFECT =
   "`No grains found at this Gate setting.` The default Gate (0.1) finds no attack in material that never falls quiet; " +
   "the tool needs a gate that copes, or the suite a percussive fixture for it (2026-11-14).";
 
+export interface KnownDefect { note: string; error: string }
+
 /**
  * Known failures, keyed `<tool id>:<input>`, each quoting its line under
- * "## Defects" in docs/BACKLOG.md. Both suites still run such a case;
- * test:cdp marks it `todo`, test:sandbox does not count it against the exit code.
+ * "## Defects" in docs/BACKLOG.md and the error text it fails with. Both suites
+ * still run such a case; test:cdp marks it `todo`, test:sandbox does not count it
+ * against the exit code. A failure whose message lacks `error` is a new defect
+ * and counts as a real failure (see `knownDefectOf`).
  */
-export const KNOWN_DEFECTS: Record<string, string> = {
-  "cdp.grains:mono": GRAINS_DEFECT,
-  "cdp.grains:stereo": GRAINS_DEFECT,
+export const KNOWN_DEFECTS: Record<string, KnownDefect> = {
+  "cdp.grains:mono": { note: GRAINS_DEFECT, error: "No grains found" },
+  "cdp.grains:stereo": { note: GRAINS_DEFECT, error: "No grains found" },
 };
+
+/**
+ * The known defect that excuses this result, or undefined. A case that passes
+ * is still returned (so callers can say it now passes); a failure is excused
+ * only when its message contains the defect's expected error.
+ */
+export function knownDefectOf(r: CaseResult): KnownDefect | undefined {
+  const d = KNOWN_DEFECTS[`${r.id}:${r.input}`];
+  return d && (r.ok || r.detail.includes(d.error)) ? d : undefined;
+}
 
 /** A single run longer than this on a 3 s fixture means something hangs: the whole run stops. */
 export const CASE_TIMEOUT_MS = 60_000;
@@ -126,7 +140,8 @@ async function checkGenerated(out: string): Promise<string> {
   if (!pathExists(out)) throw new Error(`no output file at ${out}`);
   const dur = await getAudioDuration(out);
   if (Math.abs(dur - GEN_SECONDS) > 0.01) throw new Error(`output is ${dur.toFixed(3)} s long, expected ${GEN_SECONDS} s`);
-  const { overallPeak } = await astats(out);
+  const { overallPeak, overallRms } = await astats(out);
+  if (overallRms === "-inf") throw new Error("generated output is silent (RMS -inf)");
   if (overallPeak !== "-inf" && !(Number(overallPeak) <= 0)) throw new Error(`peak is ${overallPeak} dBFS`);
   return `${dur.toFixed(3)} s, peak ${overallPeak} dB`;
 }
@@ -160,7 +175,7 @@ export async function runEverything(fixtures: Fixtures, workDir: string): Promis
     }
     results.push(result);
     const secs = ((Date.now() - started) / 1000).toFixed(1);
-    const mark = result.ok ? "ok  " : `${id}:${input}` in KNOWN_DEFECTS ? "todo" : "FAIL";
+    const mark = result.ok ? "ok  " : knownDefectOf(result) ? "todo" : "FAIL";
     process.stderr.write(`[${results.length}/${total}] ${mark} ${id} ${input} (${secs} s): ${result.detail}\n`);
   };
 
