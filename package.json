@@ -9,7 +9,10 @@
   "scripts": {
     "build": "tsc --noEmit && tsx build.ts",
     "start": "tsx build.ts && extensions-cli run",
-    "test": "tsx --test tests/*.test.ts"
+    "test": "tsx --test tests/*.test.ts",
+    "deploy": "npm run build && npm test && tsx scripts/deploy.ts",
+    "package": "tsc --noEmit && tsx build.ts --production && extensions-cli package . -o cdp-for-live.ablx",
+    "live:log": "tsx scripts/live-log.ts"
   },
   "devDependencies": {
     "@ableton-extensions/cli": "file:./extensions-sdk-1.0.0-beta.1/ableton-extensions-cli-1.0.0-beta.1.tgz",
