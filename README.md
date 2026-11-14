@@ -1,6 +1,6 @@
 # CDP for Live
 
-Bring the **Composers Desktop Project** (CDP Release 8) sound-transformation toolkit into **Ableton Live 12** as right-click actions on any audio clip. Select a clip, pick an effect from the context menu, tweak a few knobs, and Live replaces the clip in place — while quietly backing up your original to a take lane so nothing is ever lost.
+Bring the **Composers Desktop Project** (CDP Release 8) sound-transformation toolkit into **Ableton Live 13 Beta** as right-click actions on any audio clip. Select a clip, pick an effect from the context menu, tweak a few knobs, and Live replaces the clip in place — while quietly backing up your original to a take lane so nothing is ever lost.
 
 Built on the **Ableton Extensions SDK** (1.0.0-beta.1). The extension shells out to your local CDP binaries; no plugins, no bouncing to disk by hand.
 
@@ -37,7 +37,7 @@ Built on the **Ableton Extensions SDK** (1.0.0-beta.1). The extension shells out
 ## Requirements
 
 - **macOS** (developed on Apple Silicon; CDP runs x86_64 under Rosetta 2).
-- **Ableton Live 12 Beta** in developer mode, with the Extensions SDK.
+- **Ableton Live 13 Beta (13.0b25 or later)** in developer mode, with the Extensions SDK.
 - **CDP Release 8 binaries** installed locally (default lookup: `~/cdpr8/_cdp/_cdprogs`).
 - **ffmpeg / ffprobe** (e.g. `brew install ffmpeg`; found automatically in the usual Homebrew locations, or set `FFMPEG_PATH` / `FFPROBE_PATH`). Used for format conversion, region extraction, and stereo splitting.
 - **Node.js** (v24+) and npm.

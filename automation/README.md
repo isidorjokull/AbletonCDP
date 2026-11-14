@@ -18,7 +18,7 @@ Useful menu titles (note: the ellipsis is ONE glyph `…`, not three dots):
 
 | Title                  | What it does                                             |
 | ---------------------- | -------------------------------------------------------- |
-| `CDP: All Tools…`      | opens the Rack (search / Recent / Tweak-last / all 35 tools) |
+| `CDP: All Tools…`      | opens the Rack (search / Recent / Tweak-last / all tools) |
 | `CDP: Repeat Last`     | re-applies your last effect + parameters, **no dialog**   |
 | `CDP: Repeat Last…`    | opens the last effect's dialog pre-filled, tweak first    |
 | `CDP: <Tool Name>`     | opens that specific tool's dialog (e.g. `CDP: Reverb`)    |

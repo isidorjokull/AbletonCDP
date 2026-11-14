@@ -11,10 +11,10 @@
 import { readFileSync, writeFileSync } from "fs";
 import { dirname, join } from "path";
 import { fileURLToPath } from "url";
+import { findLive } from "../scripts/live-paths.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const TEMPLATE =
-  "/Applications/Ableton Live 12 Beta.app/Contents/App-Resources/Misc/Max Devices/Max Audio Effect.amxd";
+const TEMPLATE = findLive().maxTemplate;
 
 /** Reads the patcher JSON out of an .amxd. */
 function readPatcher(file) {

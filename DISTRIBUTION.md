@@ -64,7 +64,7 @@ no `@rpath`. They can be placed anywhere.
 4. **Rosetta 2.** Binaries are `Mach-O 64-bit executable x86_64`. Without
    Rosetta, `spawn` fails `Bad CPU type in executable` with no OS prompt (the
    auto-install prompt is also a LaunchServices behaviour).
-5. **Live 12 developer mode** + Extensions SDK beta. Unavoidable.
+5. **Ableton Live 13 Beta (13.0b25 or later) developer mode** + Extensions SDK beta. Unavoidable.
 
 ### The 20 binaries actually used
 
@@ -145,7 +145,7 @@ against the CDP8 GitHub repo's LICENSE before shipping binaries. Add a
 
 ## Effort
 
-- **Steps 1, 2, 4** — ~1 hour. Single-file drop-in requiring only Live 12 dev
+- **Steps 1, 2, 4** — ~1 hour. Single-file drop-in requiring only Live 13 Beta dev
   mode + ffmpeg. This is the recommended scope.
 - **Plus step 3** — zero external dependencies, but ~10× size and a licence
   decision.
