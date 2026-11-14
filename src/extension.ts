@@ -28,6 +28,7 @@ import { renderGeneratorDialog, generatorDialogSize, type GenContext } from "./u
 import { startCdpServer, DEFAULT_PORT, type Dispatcher } from "./server.js";
 import { RackState } from "./rackState.js";
 import { createDispatcher, type SdkLike } from "./dispatch.js";
+import { BUILD } from "./buildInfo.js";
 
 type Ctx = ReturnType<typeof initialize>;
 
@@ -778,7 +779,7 @@ export function activate(activation: ActivationContext) {
 
   startCommandEndpoint(context);
 
-  console.log(`[cdp-for-live] activated: ${TOOLS.length} tools + ${GENERATORS.length} generators + Rack + Repeat Last + Use as Second Sound registered`);
+  console.log(`[cdp-for-live] v${BUILD.version} (${BUILD.commit}) activated: ${TOOLS.length} tools + ${GENERATORS.length} generators + Rack + Repeat Last + Use as Second Sound registered`);
 }
 
 /**
