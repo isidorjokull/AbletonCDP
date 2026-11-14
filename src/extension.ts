@@ -166,10 +166,6 @@ async function createBackupClip(
  */
 async function backupToOriginals(track: AudioTrack<"1.0.0">, clip: AudioClip<"1.0.0">, tempo: number): Promise<void> {
   const origName = clip.name;
-  if (originalAlreadyBackedUp(track.takeLanes, { name: origName, startTime: clip.startTime, endTime: clip.endTime })) {
-    console.log(`[cdp-for-live] original already on "${ORIGINALS_LANE}"; not backed up again`);
-    return;
-  }
   const origFile = clip.filePath;
   const origColor = clip.color;
   const origStart = clip.startTime;
@@ -240,7 +236,14 @@ async function placeResult(
   if (parent instanceof AudioTrack) {
     const origStart = clip.startTime;
     const origWarped = clip.warping;
-    await backupToOriginals(parent, clip, tempo);
+    // Re-processing a CDP result whose original is already saved: do not add
+    // another backup lane. Effects only; a generator covering the clip still
+    // backs it up (placeGenerated), since nothing else keeps that audio.
+    if (originalAlreadyBackedUp(parent.takeLanes, { name: origName, startTime: clip.startTime, endTime: clip.endTime })) {
+      console.log(`[cdp-for-live] original already on "${ORIGINALS_LANE}"; not backed up again`);
+    } else {
+      await backupToOriginals(parent, clip, tempo);
+    }
 
     await step("remove original", () => parent.deleteClip(clip));
     // A bounce is already at song tempo, so it goes in unwarped — warped, Live's

@@ -17,7 +17,7 @@ test("a clip that is not a CDP result is not skipped", () => {
 });
 
 test("names without a bracketed label are not results", () => {
-  for (const name of ["Gtr []", "Gtr[Reverse]", "Gtr [Reverse] x", "[Reverse]"]) {
+  for (const name of ["Gtr []", "Gtr[Reverse]", "Gtr [Reverse] x", "[Reverse]", "Gtr\t[Reverse]"]) {
     assert.equal(originalAlreadyBackedUp([lane(ORIGINALS_LANE, [8, 12])], { ...result, name }), false, name);
   }
 });

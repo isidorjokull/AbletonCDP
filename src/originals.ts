@@ -3,7 +3,7 @@ export const ORIGINALS_LANE = "CDP Originals";
 
 const SAME_SPAN_BEATS = 1e-6;
 /** The name `placeResult` gives a result: `<original> [<label>]`. */
-const RESULT_NAME = /\s\[.+\]$/;
+const RESULT_NAME = / \[.+\]$/;
 
 /**
  * True when `clip` is a CDP result (named like one) and some "CDP Originals"

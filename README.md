@@ -9,7 +9,7 @@ Built on the **Ableton Extensions SDK** (1.0.0-beta.1). The extension shells out
 ## Features
 
 - **118 CDP effects** grouped into a clip context menu, plus an **All Tools** rack that opens a grid of every effect and lets you **chain** processing without leaving the panel.
-- **Non-destructive by default.** The processed audio replaces the clip in place; the original is moved to a `CDP Originals` take lane. A fresh lane is created whenever the previous backup slot is occupied, so backups never overwrite each other. The clip's colour is preserved.
+- **Non-destructive by default.** The processed audio replaces the clip in place; the original is moved to a `CDP Originals` take lane. A fresh lane is created whenever the previous backup slot is occupied, so backups never overwrite each other. The exception is re-processing a CDP result whose original is already on a `CDP Originals` lane: no further backup is added, and the earlier result is replaced and kept only in Live's undo history and the project's sample folder. The clip's colour is preserved.
 - **Region-aware.** Only the portion of the file the clip actually plays is processed, not the whole underlying sample.
 - **Stereo-safe.** Stereo-native CDP tools run directly; the rest are split to mono, processed per channel, and re-interleaved.
 - **Modular-synth-flavoured UI** with per-effect documentation built into each dialog, a 🎲 **Randomize** button, and a searchable Rack with Recent + Tweak-last.
