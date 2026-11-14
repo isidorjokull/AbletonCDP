@@ -11,6 +11,7 @@ dist/
 # Local tooling / editor state
 .claude/settings.local.json
 .remember/
+.impeccable/
 .DS_Store
 
 # Vendored SDK: keep the .tgz (npm file: deps) + LICENSE, drop unpacked reference docs
