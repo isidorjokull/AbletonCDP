@@ -108,7 +108,7 @@ if (pathExists(join(bundled, "pvocex2"))) return bundled;
 
 - `__dirname` is available because esbuild emits **CJS** (`build.ts`).
 - `pathExists` already falls back to `/bin/test` when the Extension Host sandbox
-  refuses `existsSync` (CLAUDE.md gotcha #10), so reading outside
+  refuses `existsSync` (`docs/reference/sdk-facts.md`, "Sandbox"), so reading outside
   `storageDirectory` is fine.
 
 ### 3. (Optional) Bundle ffmpeg/ffprobe too

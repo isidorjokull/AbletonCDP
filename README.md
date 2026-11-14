@@ -105,12 +105,10 @@ Add an entry to `TOOLS` in `src/tools/registry.ts` (id, group, blurb, docs, para
 
 ## More documentation
 
-- [`CLAUDE.md`](CLAUDE.md) — verified architecture, CDP quirks and gotchas (the authoritative developer reference).
+- [`CLAUDE.md`](CLAUDE.md) — the rules, commands and architecture every development session needs.
+- [`docs/reference/cdp-facts.md`](docs/reference/cdp-facts.md) and [`docs/reference/sdk-facts.md`](docs/reference/sdk-facts.md) — verified, dated facts about the CDP programs and about the SDK and Live.
+- [`docs/BACKLOG.md`](docs/BACKLOG.md) — open work: what is unverified in Live 13, known defects, ideas.
 - [`docs/M4L-DEVICE.md`](docs/M4L-DEVICE.md) — trigger endpoint wire contract and the Max device.
 - [`docs/SDK-MAX-BUTTON-SPEC.md`](docs/SDK-MAX-BUTTON-SPEC.md) — reusable spec for SDK-triggering Max buttons.
 - [`docs/CDP-SHORTLIST.md`](docs/CDP-SHORTLIST.md) — CDP processes considered, built, and deliberately skipped.
 - [`DISTRIBUTION.md`](DISTRIBUTION.md) — feasibility notes for sharing the extension.
-
-## Project notes
-
-`Start_Promt.md` is the original planning document and is partly superseded — see `CLAUDE.md` for the current, verified architecture and gotchas.
