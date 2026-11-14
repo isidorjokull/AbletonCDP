@@ -45,6 +45,23 @@ async function showModal(context: Ctx, url: string, w: number, h: number): Promi
   }
 }
 
+/**
+ * Tool and generator runs between a confirmed dialog and the placed result.
+ * No modal is counted then (the progress bar is not one), so without this a
+ * `/run` could replace a clip that a dialog-started run is still processing.
+ */
+let running = 0;
+
+/** Counts `fn` in `running` while it is unsettled; the only place that changes it. */
+async function counted<T>(fn: () => Promise<T>): Promise<T> {
+  running++;
+  try {
+    return await fn();
+  } finally {
+    running--;
+  }
+}
+
 function dataUrl(html: string): string {
   return `data:text/html,${encodeURIComponent(html)}`;
 }
@@ -327,39 +344,41 @@ async function processClip(
   spec: ToolSpec,
   saved: ToolParams
 ): Promise<AudioClip<"1.0.0"> | null> {
-  const params: ToolParams = { ...toolDefaults(spec), ...saved }; // fills params newer than the saved settings
-  const tempo = context.application.song.tempo;
-  const parent = clip.parent;
-  const bounced = parent instanceof AudioTrack; // see clipAudio
+  return counted(async () => {
+    const params: ToolParams = { ...toolDefaults(spec), ...saved }; // fills params newer than the saved settings
+    const tempo = context.application.song.tempo;
+    const parent = clip.parent;
+    const bounced = parent instanceof AudioTrack; // see clipAudio
 
-  // Only clean a directory Live gave this extension; if tempDir fell back to the
-  // system tmpdir, a before/after diff could delete other programs' files.
-  const ownTemp = context.environment.tempDirectory === tempDir;
-  const tempBefore = ownTemp ? listDir(tempDir) : null;
+    // Only clean a directory Live gave this extension; if tempDir fell back to the
+    // system tmpdir, a before/after diff could delete other programs' files.
+    const ownTemp = context.environment.tempDirectory === tempDir;
+    const tempBefore = ownTemp ? listDir(tempDir) : null;
 
-  let importedPath: string;
-  try {
-    const outputPath = (await context.ui.withinProgressDialog(
-      `CDP: ${spec.title}…`,
-      {},
-      async (update) => {
-        await update(bounced ? "Bouncing clip…" : "Reading clip…", 10);
-        const inputPath = await clipAudio(context, clip, tempDir, tempo);
-        let second: string | undefined;
-        if (hasSecond(spec)) {
-          await update("Preparing second sound…", 25);
-          second = await step("second sound", () => secondAudio(context, String(params.second ?? ""), inputPath, tempDir, tempo));
+    let importedPath: string;
+    try {
+      const outputPath = (await context.ui.withinProgressDialog(
+        `CDP: ${spec.title}…`,
+        {},
+        async (update) => {
+          await update(bounced ? "Bouncing clip…" : "Reading clip…", 10);
+          const inputPath = await clipAudio(context, clip, tempDir, tempo);
+          let second: string | undefined;
+          if (hasSecond(spec)) {
+            await update("Preparing second sound…", 25);
+            second = await step("second sound", () => secondAudio(context, String(params.second ?? ""), inputPath, tempDir, tempo));
+          }
+          await update(`${spec.title}…`, 40);
+          return step("CDP", () => spec.run(inputPath, params, tempDir, { tempo, second }));
         }
-        await update(`${spec.title}…`, 40);
-        return step("CDP", () => spec.run(inputPath, params, tempDir, { tempo, second }));
-      }
-    )) as string;
-    // The project copy is the only one the set uses from here on.
-    importedPath = await step("import", () => context.resources.importIntoProject(outputPath));
-  } finally {
-    if (tempBefore) removeNewFiles(tempDir, tempBefore);
-  }
-  return placeResult(clip, importedPath, spec.title, tempo, bounced);
+      )) as string;
+      // The project copy is the only one the set uses from here on.
+      importedPath = await step("import", () => context.resources.importIntoProject(outputPath));
+    } finally {
+      if (tempBefore) removeNewFiles(tempDir, tempBefore);
+    }
+    return placeResult(clip, importedPath, spec.title, tempo, bounced);
+  });
 }
 
 /** Length, tempo and (when accurate) peaks of the clip a dialog opens on; never throws. */
@@ -664,19 +683,21 @@ async function runGenerator(context: Ctx, tempDir: string, spec: GeneratorSpec, 
   const seconds = generatorSeconds(params, tempo, genCtx.selectionBeats);
   if (!Number.isFinite(seconds)) throw new Error("No length to generate: choose Beats or Seconds.");
 
-  const ownTemp = context.environment.tempDirectory === tempDir; // see processClip
-  const tempBefore = ownTemp ? listDir(tempDir) : null;
-  let importedPath: string;
-  try {
-    const outputPath = (await context.ui.withinProgressDialog(`CDP: ${spec.title}…`, {}, async (update) => {
-      await update(`${spec.title} (${seconds.toFixed(1)} s)…`, 30);
-      return step("CDP", () => spec.run(seconds, params, tempDir));
-    })) as string;
-    importedPath = await step("import", () => context.resources.importIntoProject(outputPath));
-  } finally {
-    if (tempBefore) removeNewFiles(tempDir, tempBefore);
-  }
-  await step("place result", () => placeGenerated(target, importedPath, spec, tempo, seconds));
+  await counted(async () => {
+    const ownTemp = context.environment.tempDirectory === tempDir; // see processClip
+    const tempBefore = ownTemp ? listDir(tempDir) : null;
+    let importedPath: string;
+    try {
+      const outputPath = (await context.ui.withinProgressDialog(`CDP: ${spec.title}…`, {}, async (update) => {
+        await update(`${spec.title} (${seconds.toFixed(1)} s)…`, 30);
+        return step("CDP", () => spec.run(seconds, params, tempDir));
+      })) as string;
+      importedPath = await step("import", () => context.resources.importIntoProject(outputPath));
+    } finally {
+      if (tempBefore) removeNewFiles(tempDir, tempBefore);
+    }
+    await step("place result", () => placeGenerated(target, importedPath, spec, tempo, seconds));
+  });
 }
 
 /** Logs instead of letting a rejected registration (an unsupported scope) become an unhandled rejection. */
@@ -820,7 +841,7 @@ function isSandboxed(): boolean {
   return perm !== undefined && !perm.has("fs.read", "/");
 }
 
-/** `/status`: which build is running, and whether it is busy with a dialog or the Rack. */
+/** `/status`: which build is running, and whether it is busy with a dialog, the Rack or a run. */
 function status(): Record<string, unknown> {
   return {
     version: BUILD.version,
@@ -830,7 +851,7 @@ function status(): Record<string, unknown> {
     generators: GENERATORS.length,
     node: process.version,
     sandboxed: isSandboxed(),
-    busy: modalOpen > 0 || rack.active,
+    busy: modalOpen > 0 || rack.active || running > 0,
   };
 }
 
@@ -849,9 +870,9 @@ async function runHeadless(
 ): Promise<{ result: string | null }> {
   const spec = toolById(id);
   if (!spec) throw new Error(`not a runnable tool: ${id}`);
-  const clip = context.getObjectFromHandle(handle as Handle, AudioClip);
-  console.log(`[cdp-for-live] headless run: ${spec.title} on "${clip.name}"`);
   try {
+    const clip = context.getObjectFromHandle(handle as Handle, AudioClip);
+    console.log(`[cdp-for-live] headless run: ${spec.title} on "${clip.name}"`);
     const placed = await processClip(context, tempDir, clip, spec, params as ToolParams);
     return { result: placed ? placed.name : null };
   } catch (err: unknown) {

@@ -54,7 +54,7 @@ are `{ok:false, error:"<message>"}`.
 
 | Status | Meaning |
 |---|---|
-| `200 {ok:true, version, commit, builtAt, tools, generators, node, sandboxed, busy}` | The running build. `busy` is true while a modal dialog or the Rack is open |
+| `200 {ok:true, version, commit, builtAt, tools, generators, node, sandboxed, busy}` | The running build. `busy` is true while a modal dialog or the Rack is open, or a tool or generator run is in progress |
 | `403` | `Origin` header present, or bad `token` |
 
 ```console
@@ -94,16 +94,18 @@ to the host log and reported in the response; no error dialog opens.
 
 | Status | Meaning |
 |---|---|
+| `403` | `Origin` header present, or bad `token` |
 | `200 {ok:true, id, clip, result, ms}` | Done. `clip` is the original clip's name, `result` the new clip's name (or `null`), `ms` the run's wall-clock duration in milliseconds |
 | `400 {error:"not a runnable tool: <id>"}` | `id` is not a tool |
 | `400 {error:"params must be a JSON object"}` | `params` is not valid JSON, or is an array, a string, a number or `null` |
 | `400` | Unparseable `path`, bad `track`, or not exactly one of `slot`/`arr` |
-| `403` | `Origin` header present, or bad `token` |
 | `404 {error:"clip not found"}` | No audio clip at that address |
-| `409 {error:"busy"}` | A dialog or the Rack is open, or another `/cmd` or `/run` is in flight |
+| `409 {error:"busy"}` | A dialog or the Rack is open, a tool or generator run is in progress (including one started from a dialog), or another `/cmd` or `/run` is in flight |
 | `500 {error:"<stage>: <message>"}` | The run failed; the message names the stage (`bounce:`, `CDP:`, `import:`, `place result:` …) |
 
-Checks run in that order, and nothing executes on a refused request.
+Checks run in that order (the `403` Origin and token checks first, then the
+`400`, `404` and `409` rows top to bottom), and nothing executes on a refused
+request.
 
 ```console
 $ curl -s "http://127.0.0.1:17817/run?id=cdp.pitch&track=0&arr=0&params=%7B%22semitones%22%3A-7%7D"

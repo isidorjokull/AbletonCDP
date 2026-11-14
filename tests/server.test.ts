@@ -309,6 +309,15 @@ test("/run refuses params that are not a JSON object", async () => {
   }
 });
 
+test("/run checks params before the clip address", async () => {
+  let resolved = false;
+  const res = await handleCommandRequest("/run?id=cdp.reverse&track=x&params=" + encodeURIComponent("[1]"), {},
+    runDeps({ resolveClip: () => { resolved = true; return CLIP; } }));
+  assert.equal(res.status, 400);
+  assert.equal(res.body.error, "params must be a JSON object");
+  assert.equal(resolved, false, "the address is not resolved when params are bad");
+});
+
 test("/run refuses an id that is not a tool", async () => {
   let ran = false;
   const res = await handleCommandRequest("/run?id=cdp.rack&track=0&arr=0", {}, runDeps({ run: async () => { ran = true; return { result: null }; } }));
