@@ -56,8 +56,8 @@ function firstFile(text: string): string[] {
   const i = lines.findIndex((l) => l.startsWith("FILE "));
   assert.ok(i >= 0, "expected a curve file to be passed");
   const out: string[] = [];
-  for (let j = i + 1; j < lines.length && !lines[j].startsWith("FILE ") && !lines[j].startsWith("ARGS "); j++) {
-    if (lines[j].trim()) out.push(lines[j]);
+  for (let j = i + 1; j < lines.length && !lines[j]!.startsWith("FILE ") && !lines[j]!.startsWith("ARGS "); j++) {
+    if (lines[j]!.trim()) out.push(lines[j]!);
   }
   return out;
 }
@@ -89,7 +89,7 @@ test("a cycles curve becomes a breakpoint file scaled to the input length", asyn
   const inp = tone("two.wav", 2);
   await wavesetEnvelope(inp, { shape: "falling", cycleCnt: 64, trough: 0.006, exponent: 6, cycleCntCurve: "0 4 1 400" }, td, td);
   const args = logText().split("\n").find((l) => l.startsWith("ARGS "))!.split(" ");
-  assert.match(args[5], /\.brk$/, "5th CDP argument should be the cycles curve file");
+  assert.match(args[5]!, /\.brk$/, "5th CDP argument should be the cycles curve file");
   assert.deepEqual(firstFile(logText()), ["0.000000 4.000000", "2.000000 400.000000"]);
   assert.deepEqual(dataFilesLeft(td), []);
 });
@@ -108,8 +108,8 @@ test("floor and curve curves are passed as -t and -e files", async () => {
     troughCurve: "0 0 1 0.8", exponentCurve: "0 0.3 1 8" }, td, td);
   const args = logText().split("\n").find((l) => l.startsWith("ARGS "))!.split(" ");
   assert.equal(args[5], "64");
-  assert.match(args[6], /^-t.+\.brk$/);
-  assert.match(args[7], /^-e.+\.brk$/);
+  assert.match(args[6]!, /^-t.+\.brk$/);
+  assert.match(args[7]!, /^-e.+\.brk$/);
 });
 
 test("mode 4 with no shape drawn uses the pluck shape with times in 0..1", async () => {
@@ -118,7 +118,7 @@ test("mode 4 with no shape drawn uses the pluck shape with times in 0..1", async
   await wavesetEnvelope(inp, { shape: "user", cycleCnt: 64, trough: 0.006, exponent: 6, shapeCurve: "" }, td, td);
   const args = logText().split("\n").find((l) => l.startsWith("ARGS "))!.split(" ");
   assert.deepEqual([args[1], args[2]], ["envel", "4"]);
-  assert.match(args[5], /\.txt$/);
+  assert.match(args[5]!, /\.txt$/);
   assert.equal(args[6], "64");
   const lines = firstFile(logText());
   assert.equal(lines[0], "0.000000 0.000000");
@@ -136,6 +136,6 @@ test("the registry run passes a drawn shape to mode 4", async () => {
   }, td);
   const args = logText().split("\n").find((l) => l.startsWith("ARGS "))!.split(" ");
   assert.deepEqual([args[1], args[2]], ["envel", "4"]);
-  assert.match(args[5], /\.txt$/);
+  assert.match(args[5]!, /\.txt$/);
   assert.deepEqual(firstFile(logText()), ["0.000000 0.000000", "0.500000 1.000000", "1.000000 0.000000"]);
 });

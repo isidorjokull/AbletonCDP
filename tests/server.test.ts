@@ -19,7 +19,7 @@ test("dispatches a registered command to the resolved clip's handle", async () =
   const res = await handleCommandRequest(
     "/cmd?id=cdp.rack&track=7&arr=0",
     {},
-    deps({ execute: (id, handle) => calls.push({ id, handle }) }),
+    deps({ execute: (id, handle) => { calls.push({ id, handle }); } }),
   );
 
   assert.equal(res.status, 200);

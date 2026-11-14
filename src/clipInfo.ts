@@ -23,7 +23,7 @@ export interface ClipTiming {
   endMarker: number;
 }
 
-/** LOM quirk (gotcha 1): unwarped clips report markers in seconds, warped clips in beats. */
+/** LOM quirk (see docs/reference/sdk-facts.md, "LOM quirks"): unwarped clips report markers in seconds, warped clips in beats. */
 const markerSec = (c: ClipTiming, m: number, tempo: number) => (c.warping ? (m * 60) / tempo : m);
 
 /** Seconds processClip will hand to the tool, or NaN when the region is empty. */

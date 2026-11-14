@@ -107,7 +107,7 @@ function removeNewFiles(dir: string, before: Set<string>): void {
 /**
  * Creates the backup clip, trying argument shapes in order until Live accepts
  * one. Unwarped clips are the reason: their markers are reported in SECONDS
- * (gotcha 1) while `duration` and the documented loopSettings unit are beats,
+ * (see docs/reference/sdk-facts.md, "LOM quirks") while `duration` and the documented loopSettings unit are beats,
  * so Live rejects some combinations ("Failed to create clip") — notably once a
  * clip has been trimmed and its markers are no longer 0..length.
  */

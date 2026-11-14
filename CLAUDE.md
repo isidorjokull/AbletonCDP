@@ -15,6 +15,7 @@ The activation log line reads `activated: <N> tools + <M> generators + Rack + â€
 | Command | What it does | Success looks like |
 |---------|--------------|--------------------|
 | `npm run build` | Typechecks (`tsc --noEmit`), then bundles `src/extension.ts` with esbuild into `dist/extension.js` (CommonJS), stamping the version and commit | No type errors; esbuild reports the bundle it wrote |
+| `npm run typecheck` | Typechecks `src/`, then `tests/`, `scripts/` and `build.ts` (`tsconfig.test.json`) | No output, exit 0 |
 | `npm test` | Runs every `tests/*.test.ts` with `tsx --test` (node:test, no Live, fake CDP binaries) | The summary shows `fail 0` |
 | `npm start` | Builds, then loads the extension through the dev CLI (`extensions-cli run`) | The host log shows the activation line; the CLI then kills the host after about 10 s, so use it only to check that the extension activates |
 | `npm run deploy` | Builds, tests, then copies the bundle and manifest over the installed extension, keeping `extension.js.prev` | Prints `Deployed <commit> to <install folder>`; then the user restarts Live |
@@ -32,7 +33,7 @@ The activation log line reads `activated: <N> tools + <M> generators + Rack + â€
 ## Hard rules
 
 - **Never batch-launch CDP binaries the extension does not already use.** Each never-run binary raises a Gatekeeper assessment; launching about 190 in a loop jammed `syspolicyd` and forced a power-off. Read `~/cdpr8/docs/html/*.htm` for syntax; if one must run, run one, with a hard timeout (`perl -e 'alarm 8; exec @ARGV' ./bin â€¦`).
-- **Never print `.env`.** Do not `cat`, print or log it; edit it only with a non-printing substitution. The only value in it is `EXTENSION_HOST_PATH`.
+- **Never print `.env`.** Do not `cat`, print or log it; edit it only with a non-printing substitution. The only value you need from it is `EXTENSION_HOST_PATH`.
 - **No bare fs on foreign paths.** Live runs the host under Node's `--permission` sandbox, where `existsSync`/`readFileSync` on a path outside `storageDirectory`/`tempDirectory` throws `ERR_ACCESS_DENIED`. Go through a child process (`pathExists`, ffprobe) for a clip's source file or a binary folder.
 - **Resolve every external binary to an absolute path** in `src/config.ts`, with an environment override. The installed host gets the GUI app's minimal `PATH`, so a bare `spawn("ffmpeg")` fails.
 - **Clamp ranges in the tool file, not only in the slider.** CDP accepts some values that write an empty file, exit 0, or run forever; the binary's `ERROR: Parameter[n] â€¦ out of range` message is the authoritative range.

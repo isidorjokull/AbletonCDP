@@ -96,7 +96,7 @@ All `distort` (waveset) processes are mono-only and go through `runWithStereoSup
 ## extend
 
 - `extend scramble 1 in out minseg maxseg outdur` (Scramble). Stereo-native.
-- `extend zigzag 1 in out start end dur minzig` (Zigzag). Mono-only, so it is wrapped. CDP stops with an error when `start` or `end` lie outside the file, so the tool clamps them to the real file duration measured with ffprobe (2026-07-05).
+- `extend zigzag 1 in out start end dur minzig` (Zigzag). It is wrapped. CDP stops with an error when `start` or `end` lie outside the file, so the tool clamps them to the real file duration measured with ffprobe (2026-07-05).
 - `extend freeze 1 in out outdur delay rand pshift ampcut start end gain` (Iteration Freeze). The tool clamps `delay` to 0.9 × the segment length, and `start`/`end` to the file duration, for the same reason as zigzag (2026-07-05).
 - `extend iterate`, `drunk`, `baktobak`, `loop` and `doublets` are stereo-native (2026-10-04).
 - `extend baktobak` output length = 2 × (duration − join) (2026-10-04).
@@ -347,7 +347,7 @@ Several processes take a text file that the tool writes to `tempDir` from its sl
 
 - Each CDP binary that has never been run raises a Gatekeeper assessment and an "Allow Anyway" dialog. Running about 190 of them in a shell loop jammed `syspolicyd`, stalled every new process on the machine and ended in a forced power-off (2026-10-04).
 - The quarantine flags explained it: binaries already approved carried `00c1;…;Arc`, never-run ones `0081;…` (the 0x40 "user approved" bit unset). An earlier test (2026-09-12) that concluded quarantine does not block `spawn()` passed only because `pvocex2` had already been approved; that conclusion is wrong for never-run binaries (corrected 2026-10-04).
-- The quarantine attribute was removed from all 232 binaries with `xattr -d com.apple.quarantine *`; a run after the removal was not verified. Every binary the extension uses has since been launched once without a dialog (2026-10-04).
+- The quarantine attribute was removed from all 232 binaries with `xattr -d com.apple.quarantine *`; a run after the removal was not verified. Every binary the extension used on 2026-10-04 has since been launched once without a dialog.
 - If an unused binary must be run, run ONE, with a hard timeout (`perl -e 'alarm 8; exec @ARGV' ./bin …`), and stop if it does not return at once.
 - For distribution: binaries inside a downloaded `.ablx` may be blocked on a recipient's Mac. Retest before shipping (2026-10-04).
 

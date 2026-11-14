@@ -8,7 +8,7 @@ import {
 } from "../src/tools/envelope-curve.js";
 
 const times = (pairs: [number, number][]) => pairs.map((p) => p[0]);
-const isIncreasing = (xs: number[]) => xs.every((x, i) => i === 0 || x > xs[i - 1]);
+const isIncreasing = (xs: number[]) => xs.every((x, i) => i === 0 || x > xs[i - 1]!);
 
 test("parseCurve reads t v pairs with an optional :bend and round-trips", () => {
   const pts = parseCurve("0 64 0.5 8:0.4 1 400");
@@ -41,7 +41,7 @@ test("a vertical jump is nudged at least 1 ms apart", () => {
   const out = curveToBreakpoints(parseCurve("0 0 0.5 0 0.5 0.8 1 0.8"), 4, ENV_RANGES.trough)!;
   const ts = times(out);
   assert.ok(isIncreasing(ts), `times not increasing: ${ts}`);
-  assert.ok(ts[2] - ts[1] >= 0.001 - 1e-12);
+  assert.ok(ts[2]! - ts[1]! >= 0.001 - 1e-12);
 });
 
 test("a many-point curve on a 30 ms clip stays inside the clip and increasing", () => {

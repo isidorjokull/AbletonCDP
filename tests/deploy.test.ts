@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { deployBundle } from "../scripts/deploy.ts";
+import { deployBundle } from "../scripts/deploy.js";
 
 function setup() {
   const root = mkdtempSync(join(tmpdir(), "cdp-deploy-"));
