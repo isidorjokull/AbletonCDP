@@ -21,7 +21,8 @@ The activation log line reads `activated: <N> tools + <M> generators + Rack + â€
 | `npm run deploy` | Builds, tests, then copies the bundle and manifest over the installed extension, keeping `extension.js.prev` | Prints `Deployed <commit> to <install folder>`; then the user restarts Live |
 | `npm run package` | Production build, then writes `cdp-for-live.ablx` for a first install | `cdp-for-live.ablx` is written |
 | `npm run live:log` | Prints the extension's recent lines from the installed Live's `ExtensionHost.txt` (`-- --errors` for errors and warnings only) | After a deploy and restart, the activation line names the deployed commit |
-| `npm run live:status` | Asks the running extension's `/status` which build it is and compares its commit with `git rev-parse --short HEAD` (3 s timeout) | Prints the status and exits 0; exit 1 names both commits (deploy and restart Live), exit 2 means nothing answered on the port |
+| `npm run live:status` | Asks the running extension's `/status` which build it is and compares its commit with `git rev-parse --short HEAD` (3 s timeout) | Prints the status and exits 0; exit 1 names both commits or an uncommitted build (deploy and restart Live), exit 2 means nothing answered on the port or the endpoint refused the request (its error is printed) |
+| `npm run live:smoke` | Runs a few tools through the endpoint's `/run` on the `CDP TEST` track of the open test set and checks placement and backups through `/inspect` (`-- --any-build` skips the build check); refuses to start, changing nothing, unless the build is HEAD and the set is laid out as `docs/LIVE-TESTING.md` describes. It changes the set: do not save | One `PASS` line per case and exit 0 |
 
 ## Definition of done
 
@@ -53,7 +54,7 @@ The activation log line reads `activated: <N> tools + <M> generators + Rack + â€
 - `src/config.ts`, `src/clipInfo.ts`, `src/secondSound.ts`, `src/rackState.ts`, `src/buildInfo.ts`: binary and path resolution, the clip info dialogs see as `CLIP`, the second-sound picker, the Rack's open/closed state, the stamped build identity.
 - `src/server.ts` / `src/dispatch.ts`: the loopback endpoint on `127.0.0.1:17817` (any registered command on a named clip) and its adapter to the SDK context.
 - `device/`: the Max for Live trigger device (`cdp-all-tools.amxd`, `cdp-trigger.js`) and `build-device.mjs`, which regenerates and lints it.
-- `scripts/`: `live-paths.mjs` (finds the installed Live, its log and the install folder), `deploy.ts`, `live-log.ts`.
+- `scripts/`: `live-paths.mjs` (finds the installed Live, its log and the install folder), `deploy.ts`, `live-log.ts`, `live-status.ts`, `live-smoke.ts` (the in-Live smoke test) and `smoke-lib.ts` (its pure, unit-tested checks, shared with `live-status.ts`).
 - `tests/`: unit tests run by `npm test`; CDP binaries are replaced by fake scripts in a temporary `CDP_BIN_DIR` that log their arguments.
 - `automation/`: the OS-side triggers (`cliclick` plus `osascript`) for keyboard and Stream Deck.
 
@@ -65,6 +66,7 @@ The activation log line reads `activated: <N> tools + <M> generators + Rack + â€
 | SDK and Live behaviour, dialogs, sandbox, packaging, the endpoint and the Max device | `docs/reference/sdk-facts.md` |
 | Open work: unverified in Live 13, defects, ideas | `docs/BACKLOG.md` |
 | Designs of larger features | `docs/superpowers/specs/` |
+| Building the test set, the smoke test and the manual in-Live checklist | `docs/LIVE-TESTING.md` |
 | Endpoint wire contract and the device recipe | `docs/M4L-DEVICE.md`, `docs/SDK-MAX-BUTTON-SPEC.md` |
 | Rules every session needs | this file |
 
