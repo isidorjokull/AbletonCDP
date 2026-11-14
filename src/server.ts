@@ -2,7 +2,7 @@
 // not expose URL as a global, so `new URL(...)` throws "URL is not defined"
 // there even though node and tsx provide it. Covered by a test that deletes the
 // globals to reproduce the host.
-import { URL } from "url";
+import { URL, type URLSearchParams } from "url";
 
 /** Minimal shape of the things the dispatcher needs from the SDK context. */
 export interface ClipRef {
@@ -13,6 +13,14 @@ export interface ClipRef {
 
 /** Where a clip lives: a Session slot, or an Arrangement index. */
 export type ClipAddress = { slot: number } | { arr: number };
+
+/** What `/inspect` reports about one track: plain values only, no handles. */
+export interface TrackReport {
+  name: string;
+  arrangementClips: Array<{ name: string; startTime: number; endTime: number; warping: boolean; startMarker: number; endMarker: number; filePath: string }>;
+  takeLanes: Array<{ name: string; clips: Array<{ name: string; startTime: number; endTime: number }> }>;
+  slots: Array<{ index: number; clip: string | null }>;
+}
 
 export interface Dispatcher {
   /** True if `id` is a command actually registered with Live. */
@@ -37,6 +45,10 @@ export interface Dispatcher {
    * the page can post close_and_send once this settles.
    */
   waitForDialogClose?(): Promise<void>;
+  /** Backs `/status`: what build is running and whether it is busy. */
+  status?(): Record<string, unknown>;
+  /** Backs `/inspect`: one track's clips, or null if the track does not exist. */
+  inspect?(track: number): TrackReport | null;
 }
 
 export interface CommandResponse {
@@ -129,15 +141,29 @@ export async function handleCommandRequest(
   if (headers["origin"] !== undefined) {
     return { status: 403, body: { ok: false, error: "origin not allowed" } };
   }
-  if (parsed.pathname !== "/cmd") {
-    return { status: 404, body: { ok: false, error: "unknown endpoint" } };
-  }
   const q = parsed.searchParams;
-
   if (token !== undefined && q.get("token") !== token) {
     return { status: 403, body: { ok: false, error: "bad token" } };
   }
 
+  if (parsed.pathname === "/status" && deps.status) {
+    return { status: 200, body: { ok: true, ...deps.status() } };
+  }
+  if (parsed.pathname === "/inspect" && deps.inspect) {
+    const track = toIndex(q.get("track"));
+    if (track === null) {
+      return { status: 400, body: { ok: false, error: "track must be a non-negative integer" } };
+    }
+    const report = deps.inspect(track);
+    if (!report) return { status: 404, body: { ok: false, error: "track not found" } };
+    return { status: 200, body: { ok: true, track: report } };
+  }
+  if (parsed.pathname === "/cmd") return handleCmd(q, deps);
+  return { status: 404, body: { ok: false, error: "unknown endpoint" } };
+}
+
+/** `/cmd`: run a registered command on a named clip (opens its dialog). */
+async function handleCmd(q: URLSearchParams, deps: Dispatcher): Promise<CommandResponse> {
   const id = q.get("id") ?? "";
   if (!deps.isRegistered(id)) {
     return { status: 400, body: { ok: false, error: `unknown command id: ${id}` } };

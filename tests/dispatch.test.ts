@@ -2,7 +2,10 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createDispatcher, type SdkLike } from "../src/dispatch.js";
 
-const audio = (name: string, id: bigint) => ({ handle: { id }, name, filePath: `/s/${name}.wav` });
+const audio = (name: string, id: bigint) => ({
+  handle: { id }, name, filePath: `/s/${name}.wav`,
+  startTime: 0, endTime: 4, warping: false, startMarker: 0, endMarker: 2,
+});
 
 /** Minimal stand-in for the SDK context: two tracks, one session + one arrangement clip. */
 function sdk(over: Partial<SdkLike> = {}): SdkLike {
@@ -13,8 +16,8 @@ function sdk(over: Partial<SdkLike> = {}): SdkLike {
     application: {
       song: {
         tracks: [
-          { clipSlots: [{ clip: null }, { clip: sessionClip }], arrangementClips: [] },
-          { clipSlots: [{ clip: midiClip }], arrangementClips: [arrClip] },
+          { name: "1 Audio", clipSlots: [{ clip: null }, { clip: sessionClip }], arrangementClips: [] },
+          { name: "2 Audio", clipSlots: [{ clip: midiClip }], arrangementClips: [arrClip] },
         ],
       },
     },
@@ -56,6 +59,59 @@ test("reports only ids present in the registered set", () => {
   assert.equal(d.isRegistered("cdp.rack"), true);
   assert.equal(d.isRegistered("cdp.repeatLast"), true);
   assert.equal(d.isRegistered("cdp.nope"), false);
+});
+
+test("inspect reports a track's name, audio arrangement clips, take lanes and slots", () => {
+  const audioArr = {
+    handle: { id: 10n }, name: "drums", filePath: "/s/drums.wav",
+    startTime: 4, endTime: 12, warping: true, startMarker: 0, endMarker: 8,
+  };
+  const midiArr = { handle: { id: 11n }, name: "keys", startTime: 0, endTime: 4 };
+  const fake: SdkLike = {
+    application: {
+      song: {
+        tracks: [{
+          name: "CDP TEST",
+          clipSlots: [{ clip: null }, { clip: { handle: { id: 12n }, name: "loop" } }],
+          arrangementClips: [midiArr, audioArr],
+          takeLanes: [
+            { name: "CDP Originals", clips: [{ name: "drums", startTime: 4, endTime: 12 }] },
+            { name: "Take 2", clips: [] },
+          ],
+        }],
+      },
+    },
+    getObjectFromHandle: (handle) => {
+      if (handle !== audioArr.handle) throw new Error("wrong type");
+      return audioArr;
+    },
+    executeCommand: () => {},
+  };
+  const d = createDispatcher(fake, new Set());
+
+  assert.deepEqual(d.inspect!(0), {
+    name: "CDP TEST",
+    arrangementClips: [
+      { name: "drums", startTime: 4, endTime: 12, warping: true, startMarker: 0, endMarker: 8, filePath: "/s/drums.wav" },
+    ],
+    takeLanes: [
+      { name: "CDP Originals", clips: [{ name: "drums", startTime: 4, endTime: 12 }] },
+      { name: "Take 2", clips: [] },
+    ],
+    slots: [{ index: 0, clip: null }, { index: 1, clip: "loop" }],
+  });
+  assert.equal(d.inspect!(5), null, "out-of-range track");
+});
+
+test("inspect reports no take lanes when reading them throws", () => {
+  const track = {
+    name: "Bus",
+    clipSlots: [],
+    arrangementClips: [],
+    get takeLanes(): never { throw new Error("not a lane-capable track"); },
+  };
+  const d = createDispatcher(sdk({ application: { song: { tracks: [track] } } }), new Set());
+  assert.deepEqual(d.inspect!(0), { name: "Bus", arrangementClips: [], takeLanes: [], slots: [] });
 });
 
 test("executes through the SDK's executeCommand with the clip handle", () => {

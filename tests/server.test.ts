@@ -221,3 +221,40 @@ test("an Origin header is still refused on /cmd", async () => {
   const res = await handleCommandRequest("/cmd?id=cdp.rack&track=0&arr=0", { origin: "null" }, deps());
   assert.equal(res.status, 403);
 });
+
+test("/status returns the dispatcher's status", async () => {
+  const res = await handleCommandRequest("/status", {}, deps({ status: () => ({ commit: "abc1234", tools: 3 }) }));
+  assert.equal(res.status, 200);
+  assert.deepEqual(res.body, { ok: true, commit: "abc1234", tools: 3 });
+});
+
+test("/status refuses a browser origin and a bad token", async () => {
+  assert.equal((await handleCommandRequest("/status", { origin: "https://x" }, deps({ status: () => ({}) }))).status, 403);
+  assert.equal((await handleCommandRequest("/status", {}, deps({ status: () => ({}) }), "secret")).status, 403);
+});
+
+test("/inspect returns a track report, 404 for a missing track, 400 for a bad index", async () => {
+  const report = { name: "CDP TEST", arrangementClips: [], takeLanes: [], slots: [] };
+  const d = deps({ inspect: (t) => (t === 2 ? report : null) });
+  assert.deepEqual((await handleCommandRequest("/inspect?track=2", {}, d)).body, { ok: true, track: report });
+  assert.equal((await handleCommandRequest("/inspect?track=9", {}, d)).status, 404);
+  assert.equal((await handleCommandRequest("/inspect?track=x", {}, d)).status, 400);
+});
+
+test("/status and /inspect are unknown when the dispatcher does not provide them", async () => {
+  assert.equal((await handleCommandRequest("/status", {}, deps())).status, 404);
+  assert.equal((await handleCommandRequest("/inspect?track=0", {}, deps())).status, 404);
+});
+
+test("the token is checked before the route, so a bad token on any path is 403", async () => {
+  const res = await handleCommandRequest("/nope?token=wrong", {}, deps(), "secret");
+  assert.equal(res.status, 403);
+  assert.equal(res.body.error, "bad token");
+});
+
+test("/inspect accepts a matching token", async () => {
+  const report = { name: "T", arrangementClips: [], takeLanes: [], slots: [] };
+  const res = await handleCommandRequest("/inspect?track=0&token=secret", {}, deps({ inspect: () => report }), "secret");
+  assert.equal(res.status, 200);
+  assert.deepEqual(res.body, { ok: true, track: report });
+});

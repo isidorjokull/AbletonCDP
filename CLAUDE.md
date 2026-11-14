@@ -14,13 +14,14 @@ The activation log line reads `activated: <N> tools + <M> generators + Rack + â€
 
 | Command | What it does | Success looks like |
 |---------|--------------|--------------------|
-| `npm run build` | Typechecks (`tsc --noEmit`), then bundles `src/extension.ts` with esbuild into `dist/extension.js` (CommonJS), stamping the version and commit | No type errors; esbuild reports the bundle it wrote |
+| `npm run build` | Runs `npm run typecheck`, then bundles `src/extension.ts` with esbuild into `dist/extension.js` (CommonJS), stamping the version and commit | No type errors; esbuild reports the bundle it wrote |
 | `npm run typecheck` | Typechecks `src/`, then `tests/`, `scripts/` and `build.ts` (`tsconfig.test.json`) | No output, exit 0 |
 | `npm test` | Runs every `tests/*.test.ts` with `tsx --test` (node:test, no Live, fake CDP binaries) | The summary shows `fail 0` |
 | `npm start` | Builds, then loads the extension through the dev CLI (`extensions-cli run`) | The host log shows the activation line; the CLI then kills the host after about 10 s, so use it only to check that the extension activates |
 | `npm run deploy` | Builds, tests, then copies the bundle and manifest over the installed extension, keeping `extension.js.prev` | Prints `Deployed <commit> to <install folder>`; then the user restarts Live |
 | `npm run package` | Production build, then writes `cdp-for-live.ablx` for a first install | `cdp-for-live.ablx` is written |
 | `npm run live:log` | Prints the extension's recent lines from the installed Live's `ExtensionHost.txt` (`-- --errors` for errors and warnings only) | After a deploy and restart, the activation line names the deployed commit |
+| `npm run live:status` | Asks the running extension's `/status` which build it is and compares its commit with `git rev-parse --short HEAD` (3 s timeout) | Prints the status and exits 0; exit 1 names both commits (deploy and restart Live), exit 2 means nothing answered on the port |
 
 ## Definition of done
 

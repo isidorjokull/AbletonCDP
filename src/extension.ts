@@ -32,6 +32,19 @@ import { BUILD } from "./buildInfo.js";
 
 type Ctx = ReturnType<typeof initialize>;
 
+/** Modal dialogs on screen right now; `/status` reports busy while any is. */
+let modalOpen = 0;
+
+/** Every modal dialog goes through here, so `modalOpen` stays accurate. */
+async function showModal(context: Ctx, url: string, w: number, h: number): Promise<string> {
+  modalOpen++;
+  try {
+    return await context.ui.showModalDialog(url, w, h);
+  } finally {
+    modalOpen--;
+  }
+}
+
 function dataUrl(html: string): string {
   return `data:text/html,${encodeURIComponent(html)}`;
 }
@@ -389,7 +402,7 @@ function registerTool(context: Ctx, tempDir: string, spec: ToolSpec): void {
       try {
         const clip = context.getObjectFromHandle(handle, AudioClip);
         const page = perOpen(spec) ? renderToolDialog(spec, null, await dialogClipFor(context, clip)) : html;
-        const result = await context.ui.showModalDialog(dataUrl(page), w, h);
+        const result = await showModal(context, dataUrl(page), w, h);
         if (!result) return;
         const params = JSON.parse(result) as ToolParams | null;
         if (!params) return;
@@ -398,7 +411,7 @@ function registerTool(context: Ctx, tempDir: string, spec: ToolSpec): void {
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);
         console.error(`[cdp-for-live] ${spec.title} error:`, msg);
-        await context.ui.showModalDialog(errorDialogUrl(`${spec.title} failed`, msg), 400, 190);
+        await showModal(context, errorDialogUrl(`${spec.title} failed`, msg), 400, 190);
       }
     })(arg as Handle);
   });
@@ -480,7 +493,7 @@ function registerRack(context: Ctx, tempDir: string): void {
           });
           rack.open = true;
           try {
-            result = await context.ui.showModalDialog(dataUrl(html), ALL_DIALOG_W, ALL_DIALOG_H);
+            result = await showModal(context, dataUrl(html), ALL_DIALOG_W, ALL_DIALOG_H);
           } finally {
             rack.open = false;
             rack.requestClose(); // release this dialog's now-orphaned long-poll
@@ -502,7 +515,7 @@ function registerRack(context: Ctx, tempDir: string): void {
         } catch (err: unknown) {
           const emsg = err instanceof Error ? err.message : String(err);
           console.error(`[cdp-for-live] Rack ${spec.title} error:`, emsg);
-          await context.ui.showModalDialog(errorDialogUrl(`${spec.title} failed`, emsg), 400, 190);
+          await showModal(context, errorDialogUrl(`${spec.title} failed`, emsg), 400, 190);
           // reopen on the same target so the settings can be adjusted
         }
       }
@@ -525,7 +538,7 @@ function registerUseAsSecond(context: Ctx): void {
         const clip = context.getObjectFromHandle(handle, AudioClip);
         pinnedSecond = clip.handle.id;
         console.log(`[cdp-for-live] second sound pinned: "${clip.name}"`);
-        await context.ui.showModalDialog(noticeDialogUrl("Second sound set",
+        await showModal(context, noticeDialogUrl("Second sound set",
           `"${clip.name}" is now the default second sound for the Cross & Morph effects (marked ★ in their Second sound list).`), 400, 170);
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);
@@ -640,7 +653,7 @@ async function runGenerator(context: Ctx, tempDir: string, spec: GeneratorSpec, 
   const tempo = context.application.song.tempo;
   const genCtx: GenContext = { tempo, selectionBeats: target.kind === "slot" ? null : target.selectionBeats };
   const [w, h] = generatorDialogSize(spec);
-  const result = await context.ui.showModalDialog(
+  const result = await showModal(context,
     dataUrl(renderGeneratorDialog(spec, genMemory[spec.id] ?? null, genCtx)), w, h
   );
   if (!result) return;
@@ -683,7 +696,7 @@ function registerGenerator(context: Ctx, tempDir: string, spec: GeneratorSpec): 
   const fail = async (err: unknown) => {
     const msg = err instanceof Error ? err.message : String(err);
     console.error(`[cdp-for-live] ${spec.title} error:`, msg);
-    await context.ui.showModalDialog(errorDialogUrl(`${spec.title} failed`, msg), 400, 190);
+    await showModal(context, errorDialogUrl(`${spec.title} failed`, msg), 400, 190);
   };
   addMenuAction(context, "AudioTrack.ArrangementSelection", title, spec.id);
   context.commands.registerCommand(spec.id, (arg: unknown) => {
@@ -720,14 +733,14 @@ function registerRepeatLast(context: Ctx, tempDir: string): void {
         const clip = context.getObjectFromHandle(handle, AudioClip);
         const spec = toolById(rackMemory.toolId);
         if (!spec || !rackMemory.params) {
-          await context.ui.showModalDialog(errorDialogUrl("Nothing to repeat yet", NOTHING_YET), 400, 200);
+          await showModal(context, errorDialogUrl("Nothing to repeat yet", NOTHING_YET), 400, 200);
           return;
         }
         await processClip(context, tempDir, clip, spec, rackMemory.params as ToolParams);
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);
         console.error("[cdp-for-live] Repeat Last error:", msg);
-        await context.ui.showModalDialog(errorDialogUrl("Repeat Last failed", msg), 400, 190);
+        await showModal(context, errorDialogUrl("Repeat Last failed", msg), 400, 190);
       }
     })(arg as Handle);
   });
@@ -739,12 +752,12 @@ function registerRepeatLast(context: Ctx, tempDir: string): void {
         const clip = context.getObjectFromHandle(handle, AudioClip);
         const spec = toolById(rackMemory.toolId);
         if (!spec) {
-          await context.ui.showModalDialog(errorDialogUrl("Nothing to repeat yet", NOTHING_YET), 400, 200);
+          await showModal(context, errorDialogUrl("Nothing to repeat yet", NOTHING_YET), 400, 200);
           return;
         }
         const [w, h] = toolDialogSize(spec);
         const dclip = perOpen(spec) ? await dialogClipFor(context, clip) : null;
-        const result = await context.ui.showModalDialog(
+        const result = await showModal(context,
           dataUrl(renderToolDialog(spec, rackMemory.params, dclip)), w, h
         );
         if (!result) return;
@@ -755,7 +768,7 @@ function registerRepeatLast(context: Ctx, tempDir: string): void {
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);
         console.error("[cdp-for-live] Repeat Last… error:", msg);
-        await context.ui.showModalDialog(errorDialogUrl("Repeat Last failed", msg), 400, 190);
+        await showModal(context, errorDialogUrl("Repeat Last failed", msg), 400, 190);
       }
     })(arg as Handle);
   });
@@ -799,6 +812,29 @@ function registeredCommandIds(): Set<string> {
 }
 
 /**
+ * True when Node's permission model is on and keeps fs reads off "/", i.e. the
+ * Extension Host sandbox. `process.permission` exists only under --permission.
+ */
+function isSandboxed(): boolean {
+  const perm = (process as { permission?: { has(scope: string, ref?: string): boolean } }).permission;
+  return perm !== undefined && !perm.has("fs.read", "/");
+}
+
+/** `/status`: which build is running, and whether it is busy with a dialog or the Rack. */
+function status(): Record<string, unknown> {
+  return {
+    version: BUILD.version,
+    commit: BUILD.commit,
+    builtAt: BUILD.builtAt,
+    tools: TOOLS.length,
+    generators: GENERATORS.length,
+    node: process.version,
+    sandboxed: isSandboxed(),
+    busy: modalOpen > 0 || rack.active,
+  };
+}
+
+/**
  * Starts the loopback endpoint that lets a Max for Live device (and hence a
  * keyboard shortcut or Stream Deck key) invoke any registered command on a clip
  * it names. Max supplies the selection, which the SDK itself cannot report.
@@ -818,6 +854,7 @@ function startCommandEndpoint(context: Ctx): void {
     ...createDispatcher(sdk, registeredCommandIds()),
     toggleOff: (id) => id === "cdp.rack" && rack.toggleOff(),
     waitForDialogClose: () => rack.waitForClose(),
+    status,
   };
 
   void startCdpServer(dispatcher, { port, token }).then(
