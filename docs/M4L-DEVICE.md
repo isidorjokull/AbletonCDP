@@ -44,6 +44,71 @@ $ curl -s "http://127.0.0.1:17817/cmd?id=cdp.rack&path=live_set,tracks,7,arrange
 {"ok":true,"id":"cdp.rack","clip":"A_T2 Aux-St","fileMismatch":false}
 ```
 
+### Other routes
+
+All of these are `GET`, refuse an `Origin` header (`403`) and need
+`&token=<value>` when `CDP_TOKEN` is set (`403` otherwise), like `/cmd`. Errors
+are `{ok:false, error:"<message>"}`.
+
+**`/status`** — which build is running and whether it is busy. No parameters.
+
+| Status | Meaning |
+|---|---|
+| `200 {ok:true, version, commit, builtAt, tools, generators, node, sandboxed, busy}` | The running build. `busy` is true while a modal dialog or the Rack is open |
+| `403` | `Origin` header present, or bad `token` |
+
+```console
+$ curl -s "http://127.0.0.1:17817/status"
+```
+
+**`/inspect?track=<n>`** — one track's clips as plain values (no handles):
+`{name, arrangementClips:[{name, startTime, endTime, warping, startMarker,
+endMarker, filePath}], takeLanes:[{name, clips:[{name, startTime, endTime}]}],
+slots:[{index, clip}]}`. Only audio clips are listed under `arrangementClips`.
+
+| Status | Meaning |
+|---|---|
+| `200 {ok:true, track}` | The track report |
+| `400` | `track` missing or not a non-negative integer |
+| `403` | `Origin` header present, or bad `token` |
+| `404 {error:"track not found"}` | No track at that index |
+
+```console
+$ curl -s "http://127.0.0.1:17817/inspect?track=0"
+```
+
+**`/run?id=<toolId>&(path=<LOM path> | track=<n>&(arr=<n> | slot=<n>))&params=<JSON>`**
+— runs one tool on the clip with the given parameters and **no parameter
+dialog** (Live's progress bar still shows while it runs, and closes itself), and
+answers when the run has finished. `id` must be a tool id (not `cdp.rack`,
+Repeat Last or Use as Second Sound). `params` is a URL-encoded JSON object; it
+is laid over the tool's defaults, so absent keys (or no `params` at all) take
+the default. Addressing is the same as `/cmd`.
+
+`/run` **changes the open Live set**: the clip is replaced by the result, and
+the untouched original is backed up to a "CDP Originals" take lane first,
+exactly as a run from the context menu. It does **not** record the run as
+"last", so Repeat Last is unaffected. It shares `/cmd`'s single-flight guard: a
+run in flight makes `/cmd` answer `409`, and the reverse. A failure is logged
+to the host log and reported in the response; no error dialog opens.
+
+| Status | Meaning |
+|---|---|
+| `200 {ok:true, id, clip, result, ms}` | Done. `clip` is the original clip's name, `result` the new clip's name (or `null`), `ms` the run's wall-clock duration in milliseconds |
+| `400 {error:"not a runnable tool: <id>"}` | `id` is not a tool |
+| `400 {error:"params must be a JSON object"}` | `params` is not valid JSON, or is an array, a string, a number or `null` |
+| `400` | Unparseable `path`, bad `track`, or not exactly one of `slot`/`arr` |
+| `403` | `Origin` header present, or bad `token` |
+| `404 {error:"clip not found"}` | No audio clip at that address |
+| `409 {error:"busy"}` | A dialog or the Rack is open, or another `/cmd` or `/run` is in flight |
+| `500 {error:"<stage>: <message>"}` | The run failed; the message names the stage (`bounce:`, `CDP:`, `import:`, `place result:` …) |
+
+Checks run in that order, and nothing executes on a refused request.
+
+```console
+$ curl -s "http://127.0.0.1:17817/run?id=cdp.pitch&track=0&arr=0&params=%7B%22semitones%22%3A-7%7D"
+```
+
 ### Command ids
 
 Every registered command is reachable: `cdp.rack` (All Tools), `cdp.repeatLast`,

@@ -790,7 +790,7 @@ export function activate(activation: ActivationContext) {
   for (const spec of TOOLS) registerTool(context, tempDir, spec);
   for (const spec of GENERATORS) registerGenerator(context, tempDir, spec);
 
-  startCommandEndpoint(context);
+  startCommandEndpoint(context, tempDir);
 
   console.log(`[cdp-for-live] v${BUILD.version} (${BUILD.commit}) activated: ${TOOLS.length} tools + ${GENERATORS.length} generators + Rack + Repeat Last + Use as Second Sound registered`);
 }
@@ -835,11 +835,38 @@ function status(): Record<string, unknown> {
 }
 
 /**
+ * `/run`: one tool on one clip with the given params and no dialog, so a run
+ * can be checked inside Live without a human. Replaces the clip like any run
+ * but does not record it as "last" and never opens an error dialog: a failure
+ * rejects with its stage-prefixed message for the endpoint to report.
+ */
+async function runHeadless(
+  context: Ctx,
+  tempDir: string,
+  id: string,
+  handle: unknown,
+  params: Record<string, unknown>,
+): Promise<{ result: string | null }> {
+  const spec = toolById(id);
+  if (!spec) throw new Error(`not a runnable tool: ${id}`);
+  const clip = context.getObjectFromHandle(handle as Handle, AudioClip);
+  console.log(`[cdp-for-live] headless run: ${spec.title} on "${clip.name}"`);
+  try {
+    const placed = await processClip(context, tempDir, clip, spec, params as ToolParams);
+    return { result: placed ? placed.name : null };
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`[cdp-for-live] headless ${spec.title} error:`, msg);
+    throw err;
+  }
+}
+
+/**
  * Starts the loopback endpoint that lets a Max for Live device (and hence a
  * keyboard shortcut or Stream Deck key) invoke any registered command on a clip
  * it names. Max supplies the selection, which the SDK itself cannot report.
  */
-function startCommandEndpoint(context: Ctx): void {
+function startCommandEndpoint(context: Ctx, tempDir: string): void {
   const sdk: SdkLike = {
     application: context.application,
     getObjectFromHandle: (handle) => context.getObjectFromHandle(handle as Handle, AudioClip),
@@ -855,6 +882,8 @@ function startCommandEndpoint(context: Ctx): void {
     toggleOff: (id) => id === "cdp.rack" && rack.toggleOff(),
     waitForDialogClose: () => rack.waitForClose(),
     status,
+    isTool: (id) => toolById(id) !== undefined,
+    run: (id, handle, params) => runHeadless(context, tempDir, id, handle, params),
   };
 
   void startCdpServer(dispatcher, { port, token }).then(

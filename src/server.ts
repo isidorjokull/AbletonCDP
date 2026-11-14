@@ -49,6 +49,14 @@ export interface Dispatcher {
   status?(): Record<string, unknown>;
   /** Backs `/inspect`: one track's clips, or null if the track does not exist. */
   inspect?(track: number): TrackReport | null;
+  /** True if `id` is a tool `/run` can execute (not the Rack or Repeat Last). */
+  isTool?(id: string): boolean;
+  /**
+   * Backs `/run`: runs tool `id` on the clip with `params` and no dialog,
+   * replacing the clip. Resolves with the new clip's name; rejects with the
+   * failing stage's message.
+   */
+  run?(id: string, handle: unknown, params: Record<string, unknown>): Promise<{ result: string | null }>;
 }
 
 export interface CommandResponse {
@@ -104,6 +112,48 @@ function parseAddress(slot: string | null, arr: string | null): ClipAddress | nu
   return null;
 }
 
+type AddressResult = { clip: ClipRef } | { error: CommandResponse };
+
+/**
+ * Resolves the clip a request names, shared by `/cmd` and `/run`: `path` is what
+ * the Max device sends (live.path's canonical path, verbatim); track plus
+ * exactly one of slot/arr remain supported for curl and Stream Deck use.
+ */
+function resolveRequestClip(q: URLSearchParams, deps: Dispatcher): AddressResult {
+  const bad = (status: number, error: string): AddressResult => ({ error: { status, body: { ok: false, error } } });
+
+  const rawPath = q.get("path");
+  let track: number | null;
+  let addr: ClipAddress | null;
+
+  if (rawPath !== null) {
+    const parsed = parseLomPath(rawPath);
+    if (!parsed) return bad(400, `unparseable LOM path: ${rawPath}`);
+    ({ track, addr } = parsed);
+  } else {
+    track = toIndex(q.get("track"));
+    if (track === null) return bad(400, "track must be a non-negative integer");
+    addr = parseAddress(q.get("slot"), q.get("arr"));
+    if (!addr) return bad(400, "exactly one of slot or arr is required");
+  }
+
+  const clip = deps.resolveClip(track, addr);
+  if (!clip) return bad(404, "clip not found");
+  return { clip };
+}
+
+/** The `params` query value as a plain JSON object (absent means `{}`), or null. */
+function parseParams(raw: string | null): Record<string, unknown> | null {
+  if (raw === null) return {};
+  let v: unknown;
+  try {
+    v = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  return typeof v === "object" && v !== null && !Array.isArray(v) ? (v as Record<string, unknown>) : null;
+}
+
 /**
  * Single-flight guard. A modal-opening command blocks until the user closes the
  * dialog, and during the spike a host that died with a modal open left Live
@@ -147,7 +197,7 @@ export async function handleCommandRequest(
   }
 
   if (parsed.pathname === "/status" && deps.status) {
-    return { status: 200, body: { ok: true, ...deps.status() } };
+    return { status: 200, body: { ...deps.status(), ok: true } };
   }
   if (parsed.pathname === "/inspect" && deps.inspect) {
     const track = toIndex(q.get("track"));
@@ -159,6 +209,7 @@ export async function handleCommandRequest(
     return { status: 200, body: { ok: true, track: report } };
   }
   if (parsed.pathname === "/cmd") return handleCmd(q, deps);
+  if (parsed.pathname === "/run" && deps.run && deps.isTool) return handleRun(q, deps, deps.run, deps.isTool);
   return { status: 404, body: { ok: false, error: "unknown endpoint" } };
 }
 
@@ -174,31 +225,9 @@ async function handleCmd(q: URLSearchParams, deps: Dispatcher): Promise<CommandR
     return { status: 200, body: { ok: true, id, toggled: "closed" } };
   }
 
-  // `path` is what the Max device sends: live.path's canonical path, verbatim.
-  // track/slot/arr remain supported for curl and Stream Deck use.
-  const rawPath = q.get("path");
-  let track: number | null;
-  let addr: ClipAddress | null;
-
-  if (rawPath !== null) {
-    const parsed = parseLomPath(rawPath);
-    if (!parsed) {
-      return { status: 400, body: { ok: false, error: `unparseable LOM path: ${rawPath}` } };
-    }
-    ({ track, addr } = parsed);
-  } else {
-    track = toIndex(q.get("track"));
-    if (track === null) {
-      return { status: 400, body: { ok: false, error: "track must be a non-negative integer" } };
-    }
-    addr = parseAddress(q.get("slot"), q.get("arr"));
-    if (!addr) {
-      return { status: 400, body: { ok: false, error: "exactly one of slot or arr is required" } };
-    }
-  }
-
-  const clip = deps.resolveClip(track, addr);
-  if (!clip) return { status: 404, body: { ok: false, error: "clip not found" } };
+  const found = resolveRequestClip(q, deps);
+  if ("error" in found) return found.error;
+  const { clip } = found;
 
   if (inFlight) return { status: 409, body: { ok: false, error: "busy" } };
 
@@ -209,6 +238,47 @@ async function handleCmd(q: URLSearchParams, deps: Dispatcher): Promise<CommandR
   try {
     await deps.execute(id, clip.handle);
     return { status: 200, body: { ok: true, id, clip: clip.name, fileMismatch } };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { status: 500, body: { ok: false, error: msg } };
+  } finally {
+    inFlight = false;
+  }
+}
+
+/**
+ * `/run`: run one tool on a named clip with the given params and no dialog.
+ * Changes the set (the clip is replaced, the original backed up) and does not
+ * record the run as "last". Every refusal happens before anything executes.
+ */
+async function handleRun(
+  q: URLSearchParams,
+  deps: Dispatcher,
+  run: NonNullable<Dispatcher["run"]>,
+  isTool: NonNullable<Dispatcher["isTool"]>,
+): Promise<CommandResponse> {
+  const id = q.get("id") ?? "";
+  if (!isTool(id)) {
+    return { status: 400, body: { ok: false, error: `not a runnable tool: ${id}` } };
+  }
+
+  const params = parseParams(q.get("params"));
+  if (!params) return { status: 400, body: { ok: false, error: "params must be a JSON object" } };
+
+  const found = resolveRequestClip(q, deps);
+  if ("error" in found) return found.error;
+  const { clip } = found;
+
+  // A dialog or the Rack being open counts as busy, as does any dispatch.
+  if (inFlight || deps.status?.().busy === true) {
+    return { status: 409, body: { ok: false, error: "busy" } };
+  }
+
+  inFlight = true;
+  const started = Date.now();
+  try {
+    const { result } = await run(id, clip.handle, params);
+    return { status: 200, body: { ok: true, id, clip: clip.name, result, ms: Date.now() - started } };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     return { status: 500, body: { ok: false, error: msg } };
