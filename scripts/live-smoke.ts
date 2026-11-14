@@ -21,12 +21,14 @@ import {
   TEST_TRACK,
   checkBuild,
   checkLayout,
+  checkRunsLogged,
   clipIndexAt,
   findTestTrack,
   hasOriginal,
   near,
   newErrors,
   originalsLaneCount,
+  resultPlacedAt,
   type Span,
 } from "./smoke-lib.js";
 
@@ -128,13 +130,29 @@ async function inspectTest(): Promise<TrackReport> {
   return report;
 }
 
+/** A `/run` outlived its timeout; the run is still going in Live. */
+class RunStillGoing extends Error {}
+
+/** How many `/run` requests answered 200; each must leave a headless-run log line. */
+let okRuns = 0;
+
 /** `/run` on the test track. The track index is never a parameter. */
-function run(id: string, addr: { arr: number } | { slot: number }, params?: string): Promise<Answer> {
+async function run(id: string, addr: { arr: number } | { slot: number }, params?: string): Promise<Answer> {
   const query: Record<string, string> = { id, track: String(testTrack) };
   if ("arr" in addr) query["arr"] = String(addr.arr);
   else query["slot"] = String(addr.slot);
   if (params !== undefined) query["params"] = params;
-  return get("/run", query, RUN_TIMEOUT);
+  let a: Answer;
+  try {
+    a = await get("/run", query, RUN_TIMEOUT);
+  } catch (e) {
+    if ((e as { name?: unknown } | null)?.name === "TimeoutError") {
+      throw new RunStillGoing(`/run ${id} did not answer within ${RUN_TIMEOUT / 60_000} minutes`);
+    }
+    throw e;
+  }
+  if (a.status === 200) okRuns++;
+  return a;
 }
 
 function expect(condition: boolean, why: string): void {
@@ -159,10 +177,9 @@ const cases: Array<[string, () => Promise<void>]> = [
     const r = await run("cdp.reverse", { arr: at(await inspectTest(), LAYOUT.a) });
     expectStatus(r, 200, "/run");
     const after = await inspectTest();
-    const result = r.body["result"];
     expect(
-      typeof result === "string" && after.arrangementClips.some((c) => c.name === result && near(c.startTime, spanA.startTime)),
-      `no clip named ${JSON.stringify(result)} starts at beat ${spanA.startTime}`,
+      resultPlacedAt(after, r.body["result"], spanA.startTime),
+      `no clip named ${JSON.stringify(r.body["result"])} starts at beat ${spanA.startTime}`,
     );
     expect(hasOriginal(after, spanA), `no "CDP Originals" clip spans ${beats(spanA)}`);
   }],
@@ -171,6 +188,7 @@ const cases: Array<[string, () => Promise<void>]> = [
     const lanes = originalsLaneCount(before);
     const r = await run("cdp.reverse", { arr: at(before, LAYOUT.a) });
     expectStatus(r, 200, "/run");
+    expect(typeof r.body["result"] === "string", `/run placed nothing (result ${JSON.stringify(r.body["result"])})`);
     const now = originalsLaneCount(await inspectTest());
     expect(now === lanes, `"CDP Originals" lanes went from ${lanes} to ${now}`);
   }],
@@ -189,7 +207,10 @@ const cases: Array<[string, () => Promise<void>]> = [
     const r = await run("cdp.wsRepeat", { arr: at(await inspectTest(), LAYOUT.c) });
     expectStatus(r, 200, "/run");
     const after = await inspectTest();
-    at(after, spanC.startTime);
+    expect(
+      resultPlacedAt(after, r.body["result"], spanC.startTime),
+      `no clip named ${JSON.stringify(r.body["result"])} starts at beat ${spanC.startTime}`,
+    );
     expect(hasOriginal(after, spanC), `no "CDP Originals" clip spans ${beats(spanC)}`);
   }],
   ["cdp.reverb on session slot 0", async () => {
@@ -213,8 +234,11 @@ const cases: Array<[string, () => Promise<void>]> = [
     expectStatus(await run("cdp.reverse", { arr }, "[1]"), 400, "/run cdp.reverse params=[1]");
     expect(isDeepStrictEqual(await inspectTest(), before), "the track report changed");
   }],
-  ["no new extension errors in the host log", async () => {
-    const errors = newErrors(readFileSync(logFile, "utf8"), logStart);
+  ["the host log recorded the runs and no new extension errors", async () => {
+    const log = readFileSync(logFile, "utf8");
+    const logged = checkRunsLogged(log, logStart, okRuns);
+    expect(logged.ok, logged.message);
+    const errors = newErrors(log, logStart);
     expect(errors.length === 0, `${errors.length} new error line(s):\n  ${errors.join("\n  ")}`);
   }],
 ];
@@ -228,6 +252,13 @@ for (const [i, [title, check]] of cases.entries()) {
     console.log(`PASS ${i + 1} ${title}`);
   } catch (e) {
     console.log(`FAIL ${i + 1} ${title}: ${e instanceof Error ? e.message : String(e)}`);
+    if (e instanceof RunStillGoing) {
+      console.log(
+        `STOP: a run is still in progress in Live, so cases ${i + 2}-${cases.length} were not run. ` +
+          "Wait for Live's progress bar to close. The set was changed: close it without saving, or use File > Revert.",
+      );
+      process.exit(1);
+    }
   }
 }
 console.log(`${passed} of ${cases.length} passed. The set was changed: close it without saving, or use File > Revert.`);

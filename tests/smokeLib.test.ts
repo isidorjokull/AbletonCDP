@@ -4,11 +4,13 @@ import type { TrackReport } from "../src/server.js";
 import {
   checkBuild,
   checkLayout,
+  checkRunsLogged,
   clipIndexAt,
   findTestTrack,
   hasOriginal,
   newErrors,
   originalsLaneCount,
+  resultPlacedAt,
 } from "../scripts/smoke-lib.js";
 
 type Arr = TrackReport["arrangementClips"][number];
@@ -144,4 +146,37 @@ test("hasOriginal needs a CDP Originals clip with the same span", () => {
   ];
   assert.equal(hasOriginal(t, { startTime: 64, endTime: 70 }), true);
   assert.equal(hasOriginal(t, { startTime: 0, endTime: 8 }), false);
+});
+
+test("resultPlacedAt needs a clip named result at the beat", () => {
+  const t = testTrack({ c: { name: "C Waveset Repeat" } });
+  assert.equal(resultPlacedAt(t, "C Waveset Repeat", 64.0005), true);
+  assert.equal(resultPlacedAt(t, "C Waveset Repeat", 32), false);
+  assert.equal(resultPlacedAt(t, null, 64), false, "a null result never counts, even with the original in place");
+  assert.equal(resultPlacedAt(t, "A", 64), false, "a clip of that name elsewhere does not count");
+});
+
+const RUN = (title: string) => `2026-11-14T15:02:00: info: [CDP for Live]: [cdp-for-live] headless run: ${title} on "A"`;
+
+test("checkRunsLogged: one headless-run line per successful /run is ok", () => {
+  const before = `${RUN("Reverb")}\n`;
+  const log = `${before}${RUN("Reverse")}\nx: info: [CDP for Live]: other\n${RUN("Pitch Shift")}\n`;
+  assert.equal(checkRunsLogged(log, before.length, 2).ok, true);
+});
+test("checkRunsLogged: fewer lines than runs fails, and old lines do not count", () => {
+  const before = `${RUN("Reverb")}\n${RUN("Reverb")}\n`;
+  const r = checkRunsLogged(`${before}${RUN("Reverse")}\n`, before.length, 2);
+  assert.equal(r.ok, false);
+  assert.match(r.message, /the host log did not record the runs: wrong log file\?/);
+});
+test("checkRunsLogged: an unchanged log fails when runs succeeded", () => {
+  const log = "x: info: [CDP for Live]: started\n";
+  const r = checkRunsLogged(log, log.length, 6);
+  assert.equal(r.ok, false);
+  assert.match(r.message, /the host log did not record the runs: wrong log file\?/);
+});
+test("checkRunsLogged: a log shorter than the start offset (truncated or rotated) fails", () => {
+  const r = checkRunsLogged(`${RUN("Reverse")}\n${RUN("Reverse")}\n`, 100_000, 2);
+  assert.equal(r.ok, false);
+  assert.match(r.message, /the host log did not record the runs: wrong log file\?/);
 });

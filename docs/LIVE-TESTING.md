@@ -41,7 +41,7 @@ It prints one `PASS` or `FAIL` line for each of these eight cases, in this order
 5. Reverb on the clip in the first session slot. The slot must then hold the result.
 6. Convolve on the clip at bar 1, using that clip reversed as the second sound. It must finish without an error.
 7. Two requests the extension must refuse: opening the Rack, and Reverse with malformed settings. Both must be refused, and the track must be unchanged afterwards.
-8. No new errors from the extension in Live's Extension Host log since the test began.
+8. Live's Extension Host log recorded every run since the test began (which shows the test is reading the right log), and holds no new errors from the extension.
 
 It exits successfully only when all eight pass. It ends by printing how many passed.
 

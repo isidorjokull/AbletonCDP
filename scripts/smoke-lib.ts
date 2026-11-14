@@ -111,6 +111,30 @@ export function hasOriginal(track: TrackReport, span: Span): boolean {
 }
 
 /**
+ * True if `/run`'s `result` is a clip name and an arrangement clip of that name
+ * starts at `beat`. The original still sitting there does not count.
+ */
+export function resultPlacedAt(track: TrackReport, result: unknown, beat: number): boolean {
+  return typeof result === "string" && track.arrangementClips.some((c) => c.name === result && near(c.startTime, beat));
+}
+
+/** What `runHeadless` in src/extension.ts logs once per `/run`. */
+export const HEADLESS_RUN_LINE = "[cdp-for-live] headless run:";
+
+/**
+ * Proves the log being read is the one the answering Live writes: it must hold
+ * at least one headless-run line after `fromOffset` per `/run` that answered
+ * 200. A log shorter than the offset was truncated or rotated, so it fails too.
+ */
+export function checkRunsLogged(logText: string, fromOffset: number, okRuns: number): { ok: boolean; message: string } {
+  const fail = (why: string) => ({ ok: false, message: `the host log did not record the runs: wrong log file? (${why})` });
+  if (logText.length < fromOffset) return fail("the log is shorter than when the test began");
+  const logged = logText.slice(fromOffset).split("\n").filter((l) => l.includes(HEADLESS_RUN_LINE)).length;
+  const counts = `${logged} headless-run line(s) for ${okRuns} successful /run request(s)`;
+  return logged >= okRuns ? { ok: true, message: `the host log recorded ${counts}` } : fail(counts);
+}
+
+/**
  * The extension's error lines in the host log after `fromOffset` (a character
  * offset into `logText`, taken as the log's length before the run).
  */
