@@ -14,6 +14,7 @@ Open work, one line per item, with the date it was found. Read this at the start
 ## Defects
 
 - `runCdp` keeps the whole stderr of every run in memory, unbounded (2026-10-04).
+- `cdp.grains` (Grain Reorder) fails `npm run test:cdp` on both `mono` and `stereo` (sweep plus noise bursts) at its defaults: `No grains found at this Gate setting.` The default Gate (0.1) finds no attack in material that never falls quiet; the tool needs a gate that copes, or the suite a percussive fixture for it (2026-11-14).
 - `toolDialogSize` counts mode-hidden params when it sums the dialog height (capped at 680), so mode-heavy dialogs show empty space (noted before 2026-11-14, date not recorded).
 
 ## Ideas

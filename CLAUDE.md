@@ -17,6 +17,8 @@ The activation log line reads `activated: <N> tools + <M> generators + Rack + â€
 | `npm run build` | Runs `npm run typecheck`, then bundles `src/extension.ts` with esbuild into `dist/extension.js` (CommonJS), stamping the version and commit | No type errors; esbuild reports the bundle it wrote |
 | `npm run typecheck` | Typechecks `src/`, then `tests/`, `scripts/` and `build.ts` (`tsconfig.test.json`) | No output, exit 0 |
 | `npm test` | Runs every `tests/*.test.ts` with `tsx --test` (node:test, no Live, fake CDP binaries) | The summary shows `fail 0` |
+| `npm run test:cdp` | Runs every tool (mono and stereo fixture) and generator on the real CDP binaries, one at a time, checking length, level and channel count; a few minutes | `test:cdp: N/N ok` and `fail 0`; known defects show as `todo` |
+| `npm run test:sandbox` | The same cases, bundled and run under Live's bundled Node with `--permission`, granted one temp folder, fixtures outside it | `sandbox: N/N ok under node <version>`, exit 0 |
 | `npm start` | Builds, then loads the extension through the dev CLI (`extensions-cli run`) | The host log shows the activation line; the CLI then kills the host after about 10 s, so use it only to check that the extension activates |
 | `npm run deploy` | Builds, tests, then copies the bundle and manifest over the installed extension, keeping `extension.js.prev` | Prints `Deployed <commit> to <install folder>`; then the user restarts Live |
 | `npm run package` | Production build, then writes `cdp-for-live.ablx` for a first install | `cdp-for-live.ablx` is written |

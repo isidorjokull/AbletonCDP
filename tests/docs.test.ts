@@ -9,8 +9,16 @@ test("CLAUDE.md stays a short rule file", () => {
 });
 test("tool and generator counts in README.md are the real ones", () => {
   const text = readFileSync("README.md", "utf8");
-  for (const m of text.matchAll(/\b(\d+) (?:CDP )?tools\b/g)) assert.equal(Number(m[1]), TOOLS.length);
-  for (const m of text.matchAll(/\b(\d+) generators\b/g)) assert.equal(Number(m[1]), GENERATORS.length);
+  const tools = [...text.matchAll(/\b(\d+) (?:CDP )?tools\b/g)];
+  const generators = [...text.matchAll(/\b(\d+) generators\b/g)];
+  assert.ok(tools.length > 0, "README.md states no tool count to check");
+  assert.ok(generators.length > 0, "README.md states no generator count to check");
+  for (const m of tools) assert.equal(Number(m[1]), TOOLS.length);
+  for (const m of generators) assert.equal(Number(m[1]), GENERATORS.length);
+});
+test("every npm script named in CLAUDE.md exists", () => {
+  const scripts = JSON.parse(readFileSync("package.json", "utf8")).scripts;
+  for (const m of readFileSync("CLAUDE.md", "utf8").matchAll(/npm run ([a-z:]+)/g)) assert.ok(m[1]! in scripts, m[1]);
 });
 test("CLAUDE.md and automation/README.md carry no hand-written counts", () => {
   for (const f of ["CLAUDE.md", "automation/README.md"])

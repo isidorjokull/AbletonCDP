@@ -58,7 +58,7 @@ Configuration:
 - **CDP binary directory** — auto-detected; override with the `CDP_BIN_DIR` environment variable.
 - **Extension Host path** — set `EXTENSION_HOST_PATH` in `.env` (points at Live's bundled `ExtensionHost`).
 
-When the host starts you should see `activated: 118 tools + Rack + Repeat Last + Use as Second Sound registered` in its log. In Live, right-click any audio clip → the **CDP** actions appear in the context menu.
+When the host starts you should see `activated: 118 tools + 6 generators + Rack + Repeat Last + Use as Second Sound registered` in its log. In Live, right-click any audio clip → the **CDP** actions appear in the context menu.
 
 ---
 

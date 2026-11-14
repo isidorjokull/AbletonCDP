@@ -11,6 +11,8 @@
     "build": "npm run typecheck && tsx build.ts",
     "start": "tsx build.ts && extensions-cli run",
     "test": "tsx --test tests/*.test.ts",
+    "test:cdp": "tsx --test tests/integration/*.cdp.ts",
+    "test:sandbox": "tsx scripts/sandbox-test.ts",
     "deploy": "npm run build && npm test && tsx scripts/deploy.ts",
     "package": "npm run typecheck && tsx build.ts --production && extensions-cli package . -o cdp-for-live.ablx",
     "live:log": "tsx scripts/live-log.ts",
