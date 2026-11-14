@@ -35,7 +35,7 @@ If any of these fail, it says what is wrong, ends with "Nothing was changed", an
 It prints one `PASS` or `FAIL` line for each of these eight cases, in this order:
 
 1. Reverse on clip A. The result must start where A started, and a copy of the original A must appear on a "CDP Originals" lane.
-2. Reverse again on that result. This must not add another "CDP Originals" lane. This case is known to fail until the fix for the growing lanes lands.
+2. Reverse again on that result. This must not add another "CDP Originals" lane.
 3. Pitch Shift on clip B, which is warped. The result must have warp off and end exactly where B ended.
 4. Waveset Repeat on clip C, which is trimmed. The result must start where C started, and a copy of C must appear on a "CDP Originals" lane.
 5. Reverb on the clip in the first session slot. The slot must then hold the result.

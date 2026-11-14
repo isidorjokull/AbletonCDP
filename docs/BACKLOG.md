@@ -4,6 +4,7 @@ Open work, one line per item, with the date it was found. Read this at the start
 
 ## Unverified in Live 13
 
+- Chained runs no longer add a "CDP Originals" lane (smoke case 2) — fixed 2026-11-14, not yet run in Live.
 - Generators in both menus: on an arrangement selection and on an empty clip slot, including whether `time_selection_start`/`end` are beats and whether Live accepts the overlap backup (2026-10-27).
 - The eleven Cross & Morph tools have never been run inside Live (2026-10-26).
 - Curve dialogs (Waveset Envelope, Time Stretch, Vari-speed, Brassage): pointer drawing inside Live's dialog WebView (2026-10-22).

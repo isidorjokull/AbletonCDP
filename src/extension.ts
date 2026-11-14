@@ -29,6 +29,7 @@ import { startCdpServer, DEFAULT_PORT, type Dispatcher } from "./server.js";
 import { RackState } from "./rackState.js";
 import { createDispatcher, type SdkLike } from "./dispatch.js";
 import { BUILD } from "./buildInfo.js";
+import { ORIGINALS_LANE, originalAlreadyBackedUp } from "./originals.js";
 
 type Ctx = ReturnType<typeof initialize>;
 
@@ -84,8 +85,6 @@ border:1px solid hsl(26,7%,26%);border-radius:4px;height:26px;padding:0 14px;cur
 
 /** errorDialogUrl's layout for a plain confirmation, with the accent colour instead of red. */
 const noticeDialogUrl = (title: string, message: string) => errorDialogUrl(title, message, "hsl(28,100%,62%)");
-
-const ORIGINALS_LANE = "CDP Originals";
 
 /**
  * Replaces the processed clip's audio in place and returns the NEW clip so
@@ -167,6 +166,10 @@ async function createBackupClip(
  */
 async function backupToOriginals(track: AudioTrack<"1.0.0">, clip: AudioClip<"1.0.0">, tempo: number): Promise<void> {
   const origName = clip.name;
+  if (originalAlreadyBackedUp(track.takeLanes, { name: origName, startTime: clip.startTime, endTime: clip.endTime })) {
+    console.log(`[cdp-for-live] original already on "${ORIGINALS_LANE}"; not backed up again`);
+    return;
+  }
   const origFile = clip.filePath;
   const origColor = clip.color;
   const origStart = clip.startTime;
