@@ -43,7 +43,7 @@ The activation log line reads `activated: <N> tools + <M> generators + Rack + â€
 - **Clamp ranges in the tool file, not only in the slider.** CDP accepts some values that write an empty file, exit 0, or run forever; the binary's `ERROR: Parameter[n] â€¦ out of range` message is the authoritative range.
 - **Modal dialogs only.** `showModalDialog` is the only UI surface: no panels, no transport, no closing a dialog from the extension, no hotkeys. Design every feature around that.
 - **Interactive testing only from an installed build** (`npm run deploy`, then restart Live). The dev CLI kills the host about 10 s after launch, and a dialog left open when its host dies blocks Live until it is force-quit.
-- The endpoint binds `127.0.0.1` only. Every route except `/dialog/wait` refuses a request that carries an `Origin` header and honours `CDP_TOKEN`.
+- The endpoint binds `127.0.0.1` only. Every route except `/dialog/wait` refuses a browser request (an `Origin` header, a `Sec-Fetch-Site` other than `none`, or a `Host` that is not loopback) and honours `CDP_TOKEN`.
 
 ## Architecture
 

@@ -11,6 +11,7 @@ Open work, one line per item, with the date it was found. Read this at the start
 - The Max for Live trigger device and the Rack toggle (`/dialog/wait`, `toggleOff`) (device 2026-09-12; toggle 2026-10-09).
 - `backup attempt "warped" failed` warnings in the host log (seen 2026-09-20 to 2026-10-05): do the fallback argument shapes succeed?
 - Does the dev CLI still kill the host about 10 s after launch (2026-09-12)?
+- The endpoint now also refuses a `Sec-Fetch-Site` other than `none` and a `Host` other than `127.0.0.1`/`localhost`: confirm the Max trigger device, `live:status` and `live:smoke` are still served by a running Live (2026-11-16, unit-tested only).
 
 ## Defects
 

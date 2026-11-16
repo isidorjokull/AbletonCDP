@@ -32,7 +32,7 @@ Responses are JSON:
 |---|---|
 | `200 {ok:true, id, clip, fileMismatch}` | Dispatched |
 | `400` | Unknown command id, or unparseable path/params |
-| `403` | `Origin` header present, or bad `token` |
+| `403` | A browser request (an `Origin` header, a `Sec-Fetch-Site` other than `none`, or a `Host` other than `127.0.0.1`/`localhost`), or bad `token` |
 | `404` | Unknown endpoint, or clip not found / not audio |
 | `409 {error:"busy"}` | A command is already in flight |
 | `500` | The command threw |
@@ -46,7 +46,7 @@ $ curl -s "http://127.0.0.1:17817/cmd?id=cdp.rack&path=live_set,tracks,7,arrange
 
 ### Other routes
 
-All of these are `GET`, refuse an `Origin` header (`403`) and need
+All of these are `GET`, refuse a browser request (`403`, as `/cmd` does) and need
 `&token=<value>` when `CDP_TOKEN` is set (`403` otherwise), like `/cmd`. Errors
 are `{ok:false, error:"<message>"}`.
 
@@ -55,7 +55,7 @@ are `{ok:false, error:"<message>"}`.
 | Status | Meaning |
 |---|---|
 | `200 {ok:true, version, commit, builtAt, tools, generators, node, sandboxed, busy}` | The running build. `busy` is true while a modal dialog or the Rack is open, or a tool or generator run is in progress |
-| `403` | `Origin` header present, or bad `token` |
+| `403` | A browser request (an `Origin` header, a `Sec-Fetch-Site` other than `none`, or a `Host` other than `127.0.0.1`/`localhost`), or bad `token` |
 
 ```console
 $ curl -s "http://127.0.0.1:17817/status"
@@ -70,7 +70,7 @@ slots:[{index, clip}]}`. Only audio clips are listed under `arrangementClips`.
 |---|---|
 | `200 {ok:true, track}` | The track report |
 | `400` | `track` missing or not a non-negative integer |
-| `403` | `Origin` header present, or bad `token` |
+| `403` | A browser request (an `Origin` header, a `Sec-Fetch-Site` other than `none`, or a `Host` other than `127.0.0.1`/`localhost`), or bad `token` |
 | `404 {error:"track not found"}` | No track at that index |
 
 ```console
@@ -94,7 +94,7 @@ to the host log and reported in the response; no error dialog opens.
 
 | Status | Meaning |
 |---|---|
-| `403` | `Origin` header present, or bad `token` |
+| `403` | A browser request (an `Origin` header, a `Sec-Fetch-Site` other than `none`, or a `Host` other than `127.0.0.1`/`localhost`), or bad `token` |
 | `200 {ok:true, id, clip, result, ms}` | Done. `clip` is the original clip's name, `result` the new clip's name (or `null`), `ms` the run's wall-clock duration in milliseconds |
 | `400 {error:"not a runnable tool: <id>"}` | `id` is not a tool |
 | `400 {error:"params must be a JSON object"}` | `params` is not valid JSON, or is an array, a string, a number or `null` |
@@ -103,7 +103,7 @@ to the host log and reported in the response; no error dialog opens.
 | `409 {error:"busy"}` | A dialog or the Rack is open, a tool or generator run is in progress (including one started from a dialog), or another `/cmd` or `/run` is in flight |
 | `500 {error:"<stage>: <message>"}` | The run failed; the message names the stage (`bounce:`, `CDP:`, `import:`, `place result:` …) |
 
-Checks run in that order (the `403` Origin and token checks first, then the
+Checks run in that order (the `403` browser-request and token checks first, then the
 `400`, `404` and `409` rows top to bottom), and nothing executes on a refused
 request.
 

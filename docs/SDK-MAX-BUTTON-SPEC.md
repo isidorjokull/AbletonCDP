@@ -144,7 +144,7 @@ Reply with JSON so both `[maxurl]` and Stream Deck can surface failures:
 |---|---|
 | `200 {ok:true, …}` | Dispatched |
 | `400` | Unknown command id, or unparseable params |
-| `403` | `Origin` header present, or bad token |
+| `403` | A browser request (an `Origin` header, a `Sec-Fetch-Site` other than `none`, or a foreign `Host`), or bad token |
 | `404` | Unknown endpoint, or object not found / wrong type |
 | `409 {error:"busy"}` | Single-flight guard |
 | `500` | The command threw |
@@ -152,7 +152,10 @@ Reply with JSON so both `[maxurl]` and Stream Deck can surface failures:
 Loopback binding means only local processes can reach it. Residual risk: any
 local process, **including a web page the user visits**, can issue a GET.
 Mitigations: reject any request carrying an `Origin` header (blocks browser
-`fetch`/XHR), and support an optional token query param. Judge severity by what
+`fetch`/XHR), a `Sec-Fetch-Site` other than `none` (blocks the cross-site GETs
+that carry no `Origin`: `<img>`, links, redirects; added 2026-11-16 with `/run`)
+or a `Host` other than `127.0.0.1`/`localhost` (blocks DNS rebinding), and
+support an optional token query param. Judge severity by what
 your commands do — an undoable edit is minor, anything destructive is not.
 
 ---

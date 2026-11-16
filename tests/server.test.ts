@@ -418,6 +418,51 @@ test("/run refuses a browser origin", async () => {
   assert.equal(ran, false);
 });
 
+// A cross-site <img>, link or redirect is a GET with no Origin header, so the
+// Origin check alone lets a web page drive the endpoint.
+for (const route of ["/run?id=cdp.reverse&track=0&arr=0", "/cmd?id=cdp.rack&track=0&arr=0", "/status", "/inspect?track=0"]) {
+  const path = route.split("?")[0];
+  const refused = async (headers: Record<string, string>) => {
+    let touched = false;
+    const touch = () => { touched = true; };
+    const res = await handleCommandRequest(route, headers, runDeps({
+      execute: touch,
+      run: async () => { touch(); return { result: null }; },
+      status: () => { touch(); return {}; },
+      inspect: () => { touch(); return null; },
+    }));
+    assert.equal(res.status, 403, JSON.stringify(headers));
+    assert.equal(touched, false, "a refused request must reach nothing");
+  };
+
+  test(`${path} refuses a browser request from another site, which carries no Origin`, async () => {
+    await refused({ "sec-fetch-site": "cross-site" });
+    await refused({ "sec-fetch-site": "same-site" });
+    await refused({ "sec-fetch-site": "same-origin" });
+  });
+
+  test(`${path} refuses a Host that is not this machine's loopback (DNS rebinding)`, async () => {
+    await refused({ host: "evil.example:17817" });
+    await refused({ host: "127.0.0.1.evil.example" });
+  });
+}
+
+test("the loopback clients are still served: curl, [maxurl], Node fetch, the address bar", async () => {
+  const ok = async (headers: Record<string, string>) =>
+    assert.equal((await handleCommandRequest("/run?id=cdp.reverse&track=0&arr=0", headers, runDeps())).status, 200, JSON.stringify(headers));
+  await ok({ host: "127.0.0.1:17817" });
+  await ok({ host: "localhost:17817" });
+  await ok({ host: "127.0.0.1" });
+  await ok({ host: "127.0.0.1:17817", "sec-fetch-mode": "cors" }); // Node's fetch (live:smoke, live:status)
+  await ok({ host: "127.0.0.1:17817", "sec-fetch-site": "none" }); // typed into a browser's address bar
+});
+
+test("/dialog/wait still answers the Rack page, whatever fetch metadata it carries", async () => {
+  const res = await handleCommandRequest("/dialog/wait", { origin: "null", "sec-fetch-site": "cross-site" },
+    deps({ waitForDialogClose: async () => {} }));
+  assert.equal(res.status, 200);
+});
+
 test("/run honours the token", async () => {
   assert.equal((await handleCommandRequest("/run?id=cdp.reverse&track=0&arr=0", {}, runDeps(), "secret")).status, 403);
   assert.equal((await handleCommandRequest("/run?id=cdp.reverse&track=0&arr=0&token=secret", {}, runDeps(), "secret")).status, 200);

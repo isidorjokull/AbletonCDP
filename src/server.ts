@@ -167,6 +167,9 @@ export function __resetInFlight(): void {
   inFlight = false;
 }
 
+/** The only `Host` values a loopback client sends: this machine, with or without a port. */
+const LOOPBACK_HOST = /^(127\.0\.0\.1|localhost)(:\d+)?$/i;
+
 export async function handleCommandRequest(
   url: string,
   headers: Record<string, string | undefined>,
@@ -186,10 +189,22 @@ export async function handleCommandRequest(
     };
   }
 
-  // A browser fetch/XHR always sets Origin, so this blocks a web page from
-  // driving the endpoint while leaving [maxurl] and curl unaffected.
+  // No web page may drive the endpoint; [maxurl], curl and Node's fetch send
+  // none of what is refused here. Origin covers a page's fetch/XHR, but a plain
+  // cross-site GET (an <img>, a link, a redirect) carries no Origin, so
+  // Sec-Fetch-Site, which every browser sets and no page can forge, covers
+  // those: only "none" (typed into the address bar) passes. Host covers DNS
+  // rebinding, where a foreign name resolves here and looks same-origin.
   if (headers["origin"] !== undefined) {
     return { status: 403, body: { ok: false, error: "origin not allowed" } };
+  }
+  const site = headers["sec-fetch-site"];
+  if (site !== undefined && site !== "none") {
+    return { status: 403, body: { ok: false, error: "browser request not allowed" } };
+  }
+  const host = headers["host"];
+  if (host !== undefined && !LOOPBACK_HOST.test(host)) {
+    return { status: 403, body: { ok: false, error: "host not allowed" } };
   }
   const q = parsed.searchParams;
   if (token !== undefined && q.get("token") !== token) {
